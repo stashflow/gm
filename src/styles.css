@@ -213,6 +213,15 @@ input:focus-visible {
   padding: 22px 18px 18px;
 }
 
+.lesson-image {
+  width: 100%;
+  aspect-ratio: 16 / 8.5;
+  object-fit: cover;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  filter: saturate(0.9) contrast(1.05);
+}
+
 .lesson-focus h3,
 .exercise-card h2 {
   margin: 0;

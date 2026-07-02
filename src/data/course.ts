@@ -37,7 +37,7 @@ const teach = (spec: UnitSpec): Draft => ({
   en: spec.en,
   tts: spec.de,
   tags: spec.focus,
-  note: "GM teaches the pattern, then makes you retrieve it in different ways so it moves from recognition to usable memory.",
+  note: "Use this sentence out loud.",
 });
 
 const listen = (spec: UnitSpec): Draft => ({
@@ -93,14 +93,14 @@ const localText = (spec: UnitSpec): Draft => ({
   title: "Text with a local",
   prompt: spec.localObjective,
   de: spec.localTarget,
-  en: "Complete the texting objective in German.",
+  en: "Use German to get the answer.",
   tts: spec.localTarget,
   answer: spec.localTarget,
   tags: ["conversation", "local text", ...spec.focus],
   objective: spec.localObjective,
   persona: spec.localPersona,
   targetAnswer: spec.localTarget,
-  note: "Use German only. If you are stuck, use IDK to get a tiny hint instead of switching to English.",
+  note: "Ask in German. Use IDK if you get stuck.",
 });
 
 const makeLesson = (spec: UnitSpec, index: number): Lesson => {

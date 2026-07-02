@@ -1,7 +1,7 @@
 {
   "name": "GM | Learn German",
   "short_name": "GM",
-  "description": "A focused German A1-A2 learning app for retention, speaking, and real conversation.",
+  "description": "A focused German A1-A2 learning app for speaking, listening, and everyday phrases.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f7f5ef",

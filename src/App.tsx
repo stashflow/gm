@@ -147,6 +147,19 @@ function NavButton({
   );
 }
 
+function imageForLesson(lesson: Lesson) {
+  if (lesson.focus.some((tag) => ["football", "world cup"].includes(tag))) {
+    return "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1100&q=80";
+  }
+  if (lesson.focus.some((tag) => ["food", "restaurant", "shopping"].includes(tag))) {
+    return "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1100&q=80";
+  }
+  if (lesson.focus.some((tag) => ["travel", "transport", "directions", "places"].includes(tag))) {
+    return "https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&w=1100&q=80";
+  }
+  return "https://images.unsplash.com/photo-1560969184-10fe8719e047?auto=format&fit=crop&w=1100&q=80";
+}
+
 function LearnScreen({
   nextLesson,
   dueCount,
@@ -172,19 +185,19 @@ function LearnScreen({
     <section className="screen">
       <div className="section-heading">
         <p>Today</p>
-        <h2>Learn German that sticks.</h2>
+        <h2>Start speaking German.</h2>
       </div>
 
       {showOnboarding && (
         <div className="onboarding-card">
           <div>
             <span>Start here</span>
-            <strong>One lesson. Then review. Then use German.</strong>
+            <strong>Take one short lesson.</strong>
           </div>
           <ol>
-            <li>Learn the pattern.</li>
-            <li>Answer without looking.</li>
-            <li>Review what comes back.</li>
+            <li>Listen.</li>
+            <li>Choose the answer.</li>
+            <li>Say it out loud.</li>
           </ol>
           <button className="secondary-button" type="button" onClick={onDismissOnboarding}>
             Got it
@@ -193,6 +206,7 @@ function LearnScreen({
       )}
 
       <div className="lesson-focus">
+        <img className="lesson-image" src={imageForLesson(nextLesson)} alt="" />
         <div className="lesson-meta">
           <span>{nextLesson.level}</span>
           <span>{nextLesson.unit}</span>
@@ -337,14 +351,6 @@ function ExerciseCard({
       <h2>{exercise.title}</h2>
       <p className="prompt">{exercise.prompt}</p>
 
-      {exercise.type === "localText" && (
-        <div className="objective-card">
-          <strong>Objective</strong>
-          <p>{exercise.objective}</p>
-          <small>German only. English does not count.</small>
-        </div>
-      )}
-
       {exercise.type !== "localText" && (
         <div className="phrase-block">
           <div>
@@ -470,7 +476,7 @@ function ReviewScreen({
       <section className="screen empty-state">
         <ShieldCheck size={38} />
         <h2>No due reviews.</h2>
-        <p>New recall items appear after lessons and return on spaced intervals.</p>
+        <p>Finish a lesson and your review cards will appear here.</p>
       </section>
     );
   }
@@ -606,7 +612,7 @@ function LocalChatBox({
       ...current,
       {
         role: "coach",
-        text: `Tiny hint: try "${exercise.targetAnswer}" or ask one short W-question. Stay in German.`,
+        text: `Try: "${exercise.targetAnswer}"`,
       },
     ]);
   };
@@ -615,8 +621,8 @@ function LocalChatBox({
     <div className="local-mini">
       <div className="local-mini-head">
         <div>
-          <span>Chatbox practice</span>
-          <strong>{exercise.objective}</strong>
+          <span>Mini chat</span>
+          <strong>Ask in German</strong>
           <p>Starter: {exercise.targetAnswer}</p>
         </div>
         <button className="speak-button" type="button" onClick={() => speak(exercise.targetAnswer ?? exercise.de)} aria-label="Hear target">
@@ -776,13 +782,13 @@ function ProgressScreen({
       </div>
 
       <div className="retention-note">
-        <strong>{reviewTotal} items in retention</strong>
-        <p>Reviews come back sooner when missed and later when comfortable.</p>
+        <strong>{reviewTotal} review cards</strong>
+        <p>Practice words from your lessons.</p>
       </div>
 
       <div className="concept-panel">
-        <strong>Concept tracking</strong>
-        {conceptStats.length === 0 && <p>Complete a unit to start tracking concepts.</p>}
+        <strong>Practice next</strong>
+        {conceptStats.length === 0 && <p>Finish a unit to see what to practice.</p>}
         {conceptStats.map((concept) => (
           <div className="concept-row" key={concept.tag}>
             <span>{concept.tag}</span>
