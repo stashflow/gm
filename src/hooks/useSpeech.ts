@@ -1,16 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export function useSpeech(voiceURI: string, rate: number) {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [supported, setSupported] = useState(true);
+  const [speaking, setSpeaking] = useState(false);
+  const unlockAttempted = useRef(false);
 
   useEffect(() => {
-    if (!("speechSynthesis" in window)) return;
+    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+      setSupported(false);
+      return;
+    }
 
     const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
     loadVoices();
     window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
+    const fallback = window.setTimeout(loadVoices, 350);
 
-    return () => window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
+    return () => {
+      window.clearTimeout(fallback);
+      window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
+    };
   }, []);
 
   const germanVoices = useMemo(
@@ -20,20 +30,38 @@ export function useSpeech(voiceURI: string, rate: number) {
 
   const selectedVoice = useMemo(() => {
     const saved = voices.find((voice) => voice.voiceURI === voiceURI);
-    return saved ?? germanVoices[0] ?? voices[0];
+    const germanGermany = germanVoices.find((voice) => voice.lang.toLowerCase() === "de-de");
+    return saved ?? germanGermany ?? germanVoices[0] ?? voices[0];
   }, [germanVoices, voiceURI, voices]);
 
-  const speak = (text: string) => {
-    if (!("speechSynthesis" in window)) return;
+  const speak = useCallback(
+    (text: string) => {
+      const cleanText = text.trim();
+      if (!supported || !cleanText || !("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
 
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = selectedVoice?.lang ?? "de-DE";
-    utterance.rate = rate;
-    utterance.pitch = 1;
-    if (selectedVoice) utterance.voice = selectedVoice;
-    window.speechSynthesis.speak(utterance);
-  };
+      if (!unlockAttempted.current) {
+        unlockAttempted.current = true;
+        window.speechSynthesis.resume();
+      }
 
-  return { voices, germanVoices, selectedVoice, speak };
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.lang = selectedVoice?.lang ?? "de-DE";
+      utterance.rate = Math.min(1.1, Math.max(0.55, rate || 0.82));
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      if (selectedVoice) utterance.voice = selectedVoice;
+      utterance.onstart = () => setSpeaking(true);
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => setSpeaking(false);
+
+      window.speechSynthesis.speak(utterance);
+      window.setTimeout(() => {
+        if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+      }, 0);
+    },
+    [rate, selectedVoice, supported],
+  );
+
+  return { voices, germanVoices, selectedVoice, speak, supported, speaking };
 }

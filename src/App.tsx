@@ -5,6 +5,7 @@ import {
   GraduationCap,
   Home,
   ListChecks,
+  MessageCircle,
   RotateCcw,
   Settings,
   ShieldCheck,
@@ -15,13 +16,17 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { exerciseById, lessons, unitCount } from "./data/course";
 import { useProgress } from "./hooks/useProgress";
 import { useSpeech } from "./hooks/useSpeech";
-import type { Exercise, Lesson, Quality } from "./types";
+import type { Exercise, Lesson, OnboardingPath, Quality } from "./types";
 
 type Tab = "learn" | "review" | "course" | "progress";
 
 const normalize = (value: string) =>
   value
     .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .replace(/[.,!?]/g, "")
@@ -35,16 +40,21 @@ function App() {
   const speech = useSpeech(progress.progress.settings.voiceURI, progress.progress.settings.speechRate);
   const [tab, setTab] = useState<Tab>("learn");
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(() => window.localStorage.getItem("gm-onboarding-complete") !== "true");
+  const [activeLocalExercise, setActiveLocalExercise] = useState<Exercise | null>(null);
 
   const completedCount = progress.progress.completedLessons.length;
   const progressPercent = Math.round((completedCount / lessons.length) * 100);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [tab, activeLesson, activeLocalExercise]);
 
   if (activeLesson) {
     return (
       <LessonPlayer
         lesson={activeLesson}
         speak={speech.speak}
+        speechSupported={speech.supported}
         onRecordLocal={(exercise, quality) => progress.recordReview(exercise.id, findLessonId(exercise.id), quality)}
         onBack={() => setActiveLesson(null)}
         onComplete={() => {
@@ -52,6 +62,19 @@ function App() {
           setActiveLesson(null);
           setTab("review");
         }}
+      />
+    );
+  }
+
+  if (activeLocalExercise) {
+    return (
+      <LocalPracticePlayer
+        exercise={activeLocalExercise}
+        speak={speech.speak}
+        speechSupported={speech.supported}
+        onBack={() => setActiveLocalExercise(null)}
+        onRecord={(exercise, quality) => progress.recordReview(exercise.id, findLessonId(exercise.id), quality)}
+        onComplete={() => setActiveLocalExercise(null)}
       />
     );
   }
@@ -71,23 +94,26 @@ function App() {
         <LearnScreen
           nextLesson={progress.nextLesson}
           dueCount={progress.dueReviews.length}
+          dailyReviewCount={progress.dailyReviewItems.length}
           weakCount={progress.weakCount}
           progressPercent={progressPercent}
           completedCount={completedCount}
-          showOnboarding={showOnboarding && completedCount === 0}
-          onDismissOnboarding={() => {
-            window.localStorage.setItem("gm-onboarding-complete", "true");
-            setShowOnboarding(false);
-          }}
+          onboardingPath={progress.progress.onboardingPath}
+          currentCanDo={progress.nextLesson.canDo}
+          dailyLocalExercise={progress.dailyLocalExercise}
+          dailyCompleted={progress.dailyPlan.completed}
+          onChoosePath={progress.chooseOnboardingPath}
           onStart={setActiveLesson}
+          onStartLocal={setActiveLocalExercise}
           onReview={() => setTab("review")}
         />
       )}
 
       {tab === "review" && (
         <ReviewScreen
-          dueIds={progress.dueReviews.map((item) => item.exerciseId)}
+          dueIds={progress.dailyReviewItems.map((item) => item.exerciseId)}
           speak={speech.speak}
+          speechSupported={speech.supported}
           onRecord={(exercise, quality) => progress.recordReview(exercise.id, findLessonId(exercise.id), quality)}
         />
       )}
@@ -105,9 +131,12 @@ function App() {
           comfortCount={progress.comfortCount}
           reviewTotal={progress.reviewTotal}
           conceptStats={progress.conceptStats}
+          canDoProgress={progress.canDoProgress}
           voices={speech.germanVoices}
           selectedVoiceURI={progress.progress.settings.voiceURI}
           speechRate={progress.progress.settings.speechRate}
+          speechSupported={speech.supported}
+          onTestVoice={() => speech.speak("Hallo, ich lerne Deutsch.")}
           onVoice={(voiceURI) => progress.updateSettings({ voiceURI })}
           onRate={(speechRate) => progress.updateSettings({ speechRate })}
           onReset={progress.resetProgress}
@@ -163,65 +192,105 @@ function imageForLesson(lesson: Lesson) {
 function LearnScreen({
   nextLesson,
   dueCount,
+  dailyReviewCount,
   weakCount,
   progressPercent,
   completedCount,
-  showOnboarding,
-  onDismissOnboarding,
+  onboardingPath,
+  currentCanDo,
+  dailyLocalExercise,
+  dailyCompleted,
+  onChoosePath,
   onStart,
+  onStartLocal,
   onReview,
 }: {
   nextLesson: Lesson;
   dueCount: number;
+  dailyReviewCount: number;
   weakCount: number;
   progressPercent: number;
   completedCount: number;
-  showOnboarding: boolean;
-  onDismissOnboarding: () => void;
+  onboardingPath: OnboardingPath | "";
+  currentCanDo: string;
+  dailyLocalExercise: Exercise;
+  dailyCompleted: string[];
+  onChoosePath: (path: OnboardingPath) => void;
   onStart: (lesson: Lesson) => void;
+  onStartLocal: (exercise: Exercise) => void;
   onReview: () => void;
 }) {
   return (
     <section className="screen">
       <div className="section-heading">
         <p>Today</p>
-        <h2>Start speaking German.</h2>
+        <h2>Learn one thing. Use it.</h2>
       </div>
 
-      {showOnboarding && (
-        <div className="onboarding-card">
-          <div>
-            <span>Start here</span>
-            <strong>Take one short lesson.</strong>
+      {!onboardingPath && (
+        <div className="placement-panel">
+          <strong>Pick your start.</strong>
+          <div className="placement-grid">
+            <PlacementCard title="I'm new" detail="Start with hello, name, and simple answers." onClick={() => onChoosePath("new")} />
+            <PlacementCard title="I know basics" detail="Jump to the first checkpoint and review fast." onClick={() => onChoosePath("basics")} />
+            <PlacementCard title="Travel German" detail="Prioritize cafe, train, hotel, and directions." onClick={() => onChoosePath("travel")} />
           </div>
-          <ol>
-            <li>Listen.</li>
-            <li>Choose the answer.</li>
-            <li>Say it out loud.</li>
-          </ol>
-          <button className="secondary-button" type="button" onClick={onDismissOnboarding}>
-            Got it
-          </button>
         </div>
       )}
 
-      <div className="lesson-focus">
+      <div className="daily-path">
+        <div className={dailyCompleted.includes("lesson") ? "daily-card done" : "daily-card"}>
+          <div className="daily-index">1</div>
+          <div>
+            <span>{nextLesson.level} · {nextLesson.unit}</span>
+            <strong>{nextLesson.title}</strong>
+            <p>{nextLesson.goal}</p>
+          </div>
+          <button className="primary-button" type="button" onClick={() => onStart(nextLesson)}>
+            <GraduationCap size={20} />
+            Learn
+          </button>
+        </div>
+
+        <div className={dailyCompleted.includes("review") ? "daily-card done" : "daily-card"}>
+          <div className="daily-index red">2</div>
+          <div>
+            <span>Review</span>
+            <strong>{dailyReviewCount > 0 ? `${dailyReviewCount} cards ready` : "Nothing due yet"}</strong>
+            <p>{dailyReviewCount > 0 ? "Hear it, type it, build it, and choose articles." : "Finish a lesson to create reviews."}</p>
+          </div>
+          <button className="secondary-button" type="button" onClick={onReview}>
+            <ListChecks size={20} />
+            Review
+          </button>
+        </div>
+
+        <div className={dailyCompleted.includes("local") ? "daily-card done local-task" : "daily-card local-task"}>
+          <div className="daily-index yellow">3</div>
+          <div>
+            <span>Text with a local</span>
+            <strong>{dailyLocalExercise.objective}</strong>
+            <p>Use German only. The coach helps in English.</p>
+          </div>
+          <button className="primary-button" type="button" onClick={() => onStartLocal(dailyLocalExercise)}>
+            <MessageCircle size={20} />
+            Text
+          </button>
+        </div>
+      </div>
+
+      <div className="lesson-focus compact">
         <img className="lesson-image" src={imageForLesson(nextLesson)} alt="" />
         <div className="lesson-meta">
           <span>{nextLesson.level}</span>
           <span>{nextLesson.unit}</span>
         </div>
-        <h3>{nextLesson.title}</h3>
-        <p>{nextLesson.goal}</p>
+        <h3>Now: {currentCanDo}</h3>
         <div className="focus-tags">
           {nextLesson.focus.map((tag) => (
             <span key={tag}>{tag}</span>
           ))}
         </div>
-        <button className="primary-button" type="button" onClick={() => onStart(nextLesson)}>
-          <GraduationCap size={20} />
-          Start lesson
-        </button>
       </div>
 
       <div className="metric-grid">
@@ -233,9 +302,18 @@ function LearnScreen({
 
       <button className="review-banner" type="button" onClick={onReview}>
         <ListChecks size={21} />
-        <span>{dueCount > 0 ? `${dueCount} items ready for recall` : "No due reviews right now"}</span>
+        <span>{dueCount > 0 ? `${dueCount} review items ready` : "No due reviews right now"}</span>
       </button>
     </section>
+  );
+}
+
+function PlacementCard({ title, detail, onClick }: { title: string; detail: string; onClick: () => void }) {
+  return (
+    <button className="placement-card" type="button" onClick={onClick}>
+      <strong>{title}</strong>
+      <span>{detail}</span>
+    </button>
   );
 }
 
@@ -251,12 +329,14 @@ function Metric({ label, value }: { label: string; value: string }) {
 function LessonPlayer({
   lesson,
   speak,
+  speechSupported,
   onBack,
   onComplete,
   onRecordLocal,
 }: {
   lesson: Lesson;
   speak: (text: string) => void;
+  speechSupported: boolean;
   onBack: () => void;
   onComplete: () => void;
   onRecordLocal: (exercise: Exercise, quality: Quality) => void;
@@ -287,6 +367,7 @@ function LessonPlayer({
         key={exercise.id}
         exercise={exercise}
         speak={speak}
+        speechSupported={speechSupported}
         actionLabel={isLast ? "Finish lesson" : "Next"}
         onAction={() => {
           if (isLast) onComplete();
@@ -298,9 +379,48 @@ function LessonPlayer({
   );
 }
 
+function LocalPracticePlayer({
+  exercise,
+  speak,
+  speechSupported,
+  onBack,
+  onComplete,
+  onRecord,
+}: {
+  exercise: Exercise;
+  speak: (text: string) => void;
+  speechSupported: boolean;
+  onBack: () => void;
+  onComplete: () => void;
+  onRecord: (exercise: Exercise, quality: Quality) => void;
+}) {
+  return (
+    <main className="lesson-shell local-practice-shell">
+      <header className="lesson-header">
+        <button className="icon-button close-button" type="button" onClick={onBack} aria-label="Close text practice">
+          <X size={22} />
+        </button>
+        <div>
+          <p>Daily text</p>
+          <h1>Text with a local</h1>
+        </div>
+      </header>
+      <ExerciseCard
+        exercise={exercise}
+        speak={speak}
+        speechSupported={speechSupported}
+        actionLabel="Finish text"
+        onAction={onComplete}
+        onRecordLocal={onRecord}
+      />
+    </main>
+  );
+}
+
 function ExerciseCard({
   exercise,
   speak,
+  speechSupported,
   actionLabel,
   onAction,
   onReviewQuality,
@@ -308,37 +428,44 @@ function ExerciseCard({
 }: {
   exercise: Exercise;
   speak: (text: string) => void;
+  speechSupported: boolean;
   actionLabel?: string;
   onAction?: () => void;
   onReviewQuality?: (quality: Quality) => void;
   onRecordLocal?: (exercise: Exercise, quality: Quality) => void;
 }) {
   const [selected, setSelected] = useState("");
-  const [built, setBuilt] = useState<string[]>([]);
-  const startsOpen = exercise.type === "teach" || exercise.type === "localText";
-  const [revealed, setRevealed] = useState(startsOpen);
-  const [answered, setAnswered] = useState(startsOpen);
+  const [typed, setTyped] = useState("");
+  const [built, setBuilt] = useState<number[]>([]);
+  const startsRevealed = exercise.type === "teach" || exercise.type === "localText";
+  const startsAnswered = exercise.type === "teach";
+  const [revealed, setRevealed] = useState(startsRevealed);
+  const [answered, setAnswered] = useState(startsAnswered);
   const [correct, setCorrect] = useState<boolean | null>(null);
 
   useEffect(() => {
     setSelected("");
+    setTyped("");
     setBuilt([]);
-    const isOpen = exercise.type === "teach" || exercise.type === "localText";
-    setRevealed(isOpen);
-    setAnswered(isOpen);
+    const isRevealed = exercise.type === "teach" || exercise.type === "localText";
+    setRevealed(isRevealed);
+    setAnswered(exercise.type === "teach");
     setCorrect(null);
   }, [exercise.id, exercise.type]);
 
   const orderedAnswer = Array.isArray(exercise.answer) ? exercise.answer.join(" ") : exercise.answer ?? exercise.de;
   const options = exercise.options ?? [];
-  const remainingWords = options.filter((word, idx) => {
-    const usedIndexes = built.map((builtWord) => options.indexOf(builtWord));
-    return !usedIndexes.includes(idx);
-  });
+  const remainingWords = options.map((word, index) => ({ word, index })).filter((item) => !built.includes(item.index));
 
   const checkAnswer = () => {
-    const attempt = exercise.type === "builder" ? built.join(" ") : selected;
-    const isCorrect = normalize(attempt) === normalize(orderedAnswer);
+    const attempt =
+      exercise.type === "builder"
+        ? built.map((index) => options[index]).join(" ")
+        : exercise.reviewMode === "typeIt"
+          ? typed
+          : selected;
+    const acceptable = [orderedAnswer, ...(exercise.acceptableAnswers ?? [])];
+    const isCorrect = acceptable.some((answer) => normalize(attempt) === normalize(answer));
     setCorrect(isCorrect);
     setAnswered(true);
     setRevealed(true);
@@ -348,9 +475,18 @@ function ExerciseCard({
   const isPassive = exercise.type === "teach" || exercise.type === "listenRepeat";
   const visibleDe = exercise.displayDe ?? exercise.de;
   const visibleEn = exercise.displayEn ?? exercise.en;
-  const showPhrase = !exercise.promptOnly && exercise.type !== "localText";
+  const showPhrase = !exercise.promptOnly && exercise.type !== "localText" && exercise.type !== "builder";
+  const showFeedbackListen = speechSupported && (!showPhrase || correct === false);
   const leadText =
-    exercise.type === "localText" ? "Text in German." : exercise.promptOnly && visibleDe ? visibleDe : exercise.type === "builder" ? exercise.en : exercise.prompt;
+    exercise.type === "localText"
+      ? "Text in German."
+      : exercise.reviewMode === "hearIt" && exercise.type !== "teach"
+        ? "Listen. Choose what it means."
+        : exercise.promptOnly && visibleDe
+          ? visibleDe
+          : exercise.type === "builder"
+            ? exercise.en
+            : exercise.prompt;
 
   return (
     <article className={`exercise-card ${exercise.type} ${correct === true ? "is-correct" : ""} ${correct === false ? "is-incorrect" : ""}`}>
@@ -370,20 +506,27 @@ function ExerciseCard({
             <strong>{visibleDe}</strong>
             {visibleEn && <span>{visibleEn}</span>}
           </div>
-          <button className="speak-button" type="button" onClick={() => speak(exercise.tts)} aria-label="Listen">
+          <button className="speak-button" type="button" onClick={() => speak(exercise.tts)} aria-label="Listen" disabled={!speechSupported}>
             <Volume2 size={20} />
           </button>
         </div>
       )}
 
+      {exercise.reviewMode === "hearIt" && exercise.type !== "teach" && (
+        <button className="audio-first" type="button" onClick={() => speak(exercise.tts)} disabled={!speechSupported}>
+          <Volume2 size={24} />
+          Hear German
+        </button>
+      )}
+
       {exercise.type === "builder" && (
         <div className="builder-area">
           <button className="built-sentence" type="button" onClick={() => setBuilt([])}>
-            {built.length > 0 ? built.join(" ") : "Tap words below"}
+            {built.length > 0 ? built.map((index) => options[index]).join(" ") : "Tap words below"}
           </button>
           <div className="word-bank">
-            {remainingWords.map((word) => (
-              <button key={`${word}-${built.length}`} type="button" onClick={() => setBuilt((current) => [...current, word])}>
+            {remainingWords.map(({ word, index }) => (
+              <button key={`${word}-${index}`} type="button" onClick={() => setBuilt((current) => [...current, index])}>
                 {word}
               </button>
             ))}
@@ -391,7 +534,21 @@ function ExerciseCard({
         </div>
       )}
 
-      {exercise.type !== "builder" && options.length > 0 && (
+      {exercise.reviewMode === "typeIt" && !answered && (
+        <label className="answer-field">
+          Type the German
+          <input
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+            autoCapitalize="none"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Deutsch..."
+          />
+        </label>
+      )}
+
+      {exercise.type !== "builder" && exercise.reviewMode !== "typeIt" && options.length > 0 && (
         <div className="choice-list">
           {options.map((option) => (
             <button
@@ -420,11 +577,11 @@ function ExerciseCard({
         </button>
       )}
 
-      {!isPassive && !answered && (
+      {!isPassive && exercise.type !== "localText" && !answered && (
         <button
           className="primary-button"
           type="button"
-          disabled={exercise.type === "builder" ? built.length === 0 : selected.length === 0}
+          disabled={exercise.type === "builder" ? built.length === 0 : exercise.reviewMode === "typeIt" ? typed.trim().length === 0 : selected.length === 0}
           onClick={checkAnswer}
         >
           <Check size={20} />
@@ -438,11 +595,21 @@ function ExerciseCard({
           {correct === false && <p>The correct answer is: {orderedAnswer}</p>}
           {exercise.pronunciation && <p>Say it like: {exercise.pronunciation}</p>}
           {exercise.note && <p>{exercise.note}</p>}
+          {showFeedbackListen && (
+            <button className="feedback-listen" type="button" onClick={() => speak(orderedAnswer)}>
+              <Volume2 size={17} />
+              Hear it
+            </button>
+          )}
         </div>
       )}
 
       {exercise.type === "localText" && (
-        <LocalChatBox exercise={exercise} onRecord={(quality) => onRecordLocal?.(exercise, quality)} />
+        <LocalChatBox
+          exercise={exercise}
+          onComplete={() => setAnswered(true)}
+          onRecord={(quality) => onRecordLocal?.(exercise, quality)}
+        />
       )}
 
       {answered && onAction && (
@@ -457,10 +624,12 @@ function ExerciseCard({
 function ReviewScreen({
   dueIds,
   speak,
+  speechSupported,
   onRecord,
 }: {
   dueIds: string[];
   speak: (text: string) => void;
+  speechSupported: boolean;
   onRecord: (exercise: Exercise, quality: Quality) => void;
 }) {
   const [completed, setCompleted] = useState<string[]>([]);
@@ -486,9 +655,14 @@ function ReviewScreen({
       <ExerciseCard
         exercise={exercise}
         speak={speak}
+        speechSupported={speechSupported}
         onReviewQuality={(quality) => {
           onRecord(exercise, quality);
           setCompleted((items) => [...items, exercise.id]);
+        }}
+        onRecordLocal={(item, quality) => {
+          onRecord(item, quality);
+          setCompleted((items) => [...items, item.id]);
         }}
       />
       <div className="manual-quality">
@@ -528,11 +702,23 @@ type LocalResponse = {
   missionComplete: boolean;
 };
 
+const looksLikeEnglish = (text: string) =>
+  /\b(my name|where are|where do|i am|i'm|i come|thank you|thanks|please|what is|what are|how much|how old|do you|can you|the local)\b/i.test(text);
+
+const coachText = (data: LocalResponse) => {
+  const feedback = data.feedback.trim();
+  const correction = data.correction.trim();
+  if (!correction) return feedback;
+  return `${feedback} ${correction}`;
+};
+
 function LocalChatBox({
   exercise,
+  onComplete,
   onRecord,
 }: {
   exercise: Exercise;
+  onComplete: () => void;
   onRecord: (quality: Quality) => void;
 }) {
   const [messages, setMessages] = useState<LocalMessage[]>([]);
@@ -540,17 +726,29 @@ function LocalChatBox({
   const [status, setStatus] = useState("");
   const [missionComplete, setMissionComplete] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [canContinueOffline, setCanContinueOffline] = useState(false);
 
   useEffect(() => {
     setMissionComplete(false);
     setStatus("");
     setInput("");
+    setCanContinueOffline(false);
     setMessages([{ role: "local", text: greetingFor(exercise) }]);
   }, [exercise]);
 
   const send = async () => {
     const learnerText = input.trim();
     if (!learnerText) return;
+    if (looksLikeEnglish(learnerText)) {
+      setInput("");
+      setMessages((current) => [
+        ...current,
+        { role: "learner", text: learnerText },
+        { role: "coach", text: "Use German only here. Keep it short and use the sentence pattern from this lesson." },
+      ]);
+      setStatus("German only");
+      return;
+    }
     setLoading(true);
     setStatus("");
     setInput("");
@@ -558,6 +756,9 @@ function LocalChatBox({
     setMessages(nextMessages);
 
     try {
+      const staticPreview =
+        ["127.0.0.1", "localhost"].includes(window.location.hostname) && window.location.port === "4173";
+      if (staticPreview) throw new Error("Local chat is unavailable.");
       const response = await fetch("/api/local-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -568,34 +769,38 @@ function LocalChatBox({
             objective: exercise.objective,
             persona: exercise.persona,
             targetAnswer: Array.isArray(exercise.answer) ? exercise.answer.join(" ") : exercise.answer,
+            scene: exercise.scene,
+            skillId: exercise.skillId,
+            acceptableAnswers: exercise.acceptableAnswers,
             tags: exercise.tags,
           },
           messages: nextMessages,
         }),
       });
-      const data = (await response.json()) as LocalResponse & { error?: string };
+      const data = (await response.json().catch(() => ({ error: "Local chat is unavailable." }))) as LocalResponse & { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Local chat failed.");
 
       setMessages([
         ...nextMessages,
         { role: "local", text: data.reply },
-        { role: "coach", text: `${data.feedback}${data.correction ? ` Correction: ${data.correction}` : ""}` },
+        { role: "coach", text: coachText(data) },
       ]);
       setMissionComplete(data.missionComplete);
       setStatus(data.missionComplete ? "Objective complete" : "Keep going in German");
-      if (data.missionComplete) onRecord("good");
+      if (data.missionComplete) {
+        onRecord("good");
+        onComplete();
+      }
     } catch (error) {
       setMessages([
         ...nextMessages,
         {
           role: "coach",
-          text:
-            error instanceof Error
-              ? error.message
-              : "The local chat could not answer. Check that OPENAI_API_KEY is set in your .env file.",
+          text: "Local chat needs the deployment API route and OpenAI key. You can still finish this practice.",
         },
       ]);
-      setStatus("Needs API key");
+      setStatus("Chat unavailable");
+      setCanContinueOffline(true);
     } finally {
       setLoading(false);
     }
@@ -630,6 +835,18 @@ function LocalChatBox({
       </div>
 
       {status && <div className={missionComplete ? "feedback" : "feedback needs-work"}>{status}</div>}
+      {canContinueOffline && (
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => {
+            onRecord("hard");
+            onComplete();
+          }}
+        >
+          Continue without chat
+        </button>
+      )}
 
       <div className="composer">
         <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Schreib auf Deutsch..." rows={3} />
@@ -668,7 +885,7 @@ function CourseScreen({
     <section className="screen course-list">
       <div className="section-heading">
         <p>Course map</p>
-        <h2>A1.1 to A2.16</h2>
+        <h2>128 micro-lessons</h2>
       </div>
       <div className="course-tabs" role="tablist" aria-label="Course level">
         <button className={levelFilter === "all" ? "active" : ""} type="button" onClick={() => setLevelFilter("all")}>
@@ -692,7 +909,7 @@ function CourseScreen({
             <span>
               <strong>{lessonItem.title}</strong>
               <small>
-                {lessonItem.unit} · {lessonItem.focus.join(", ")}
+                {lessonItem.unit} · {lessonItem.checkpoint ? "Checkpoint" : lessonItem.focus.join(", ")}
               </small>
             </span>
           </button>
@@ -710,9 +927,12 @@ function ProgressScreen({
   comfortCount,
   reviewTotal,
   conceptStats,
+  canDoProgress,
   voices,
   selectedVoiceURI,
   speechRate,
+  speechSupported,
+  onTestVoice,
   onVoice,
   onRate,
   onReset,
@@ -724,9 +944,12 @@ function ProgressScreen({
   comfortCount: number;
   reviewTotal: number;
   conceptStats: Array<{ tag: string; comfortable: number; weak: number; seen: number; total: number; score: number }>;
+  canDoProgress: Array<{ id: string; text: string; lessonId: string; level: "A1" | "A2"; status: string }>;
   voices: SpeechSynthesisVoice[];
   selectedVoiceURI: string;
   speechRate: number;
+  speechSupported: boolean;
+  onTestVoice: () => void;
   onVoice: (voiceURI: string) => void;
   onRate: (rate: number) => void;
   onReset: () => void;
@@ -743,6 +966,16 @@ function ProgressScreen({
         <Metric label="Due today" value={String(dueCount)} />
         <Metric label="Comfortable" value={String(comfortCount)} />
         <Metric label="Needs review" value={String(weakCount)} />
+      </div>
+
+      <div className="can-do-panel">
+        <strong>What you can do</strong>
+        {canDoProgress.slice(0, 10).map((item) => (
+          <div className="can-do-row" key={item.id}>
+            <span>{item.text}</span>
+            <small className={`status-pill ${item.status}`}>{item.status}</small>
+          </div>
+        ))}
       </div>
 
       <div className="settings-panel">
@@ -769,6 +1002,11 @@ function ProgressScreen({
           />
           <span>{speechRate.toFixed(2)}x</span>
         </label>
+        <button className="secondary-button" type="button" onClick={onTestVoice} disabled={!speechSupported}>
+          <Volume2 size={18} />
+          {speechSupported ? "Test German voice" : "Speech unavailable"}
+        </button>
+        {!speechSupported && <p className="settings-help">This browser does not expose text to speech.</p>}
       </div>
 
       <div className="retention-note">
