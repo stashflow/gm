@@ -4,21 +4,20 @@ import {
   ChevronLeft,
   GraduationCap,
   Home,
-  MessageCircle,
   ListChecks,
   RotateCcw,
   Settings,
   ShieldCheck,
   Volume2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { allExercises, exerciseById, lessons, unitCount } from "./data/course";
+import { exerciseById, lessons, unitCount } from "./data/course";
 import { useProgress } from "./hooks/useProgress";
 import { useSpeech } from "./hooks/useSpeech";
 import type { Exercise, Lesson, Quality } from "./types";
 
-type Tab = "learn" | "review" | "course" | "local" | "progress";
+type Tab = "learn" | "review" | "course" | "progress";
 
 const normalize = (value: string) =>
   value
@@ -36,7 +35,7 @@ function App() {
   const speech = useSpeech(progress.progress.settings.voiceURI, progress.progress.settings.speechRate);
   const [tab, setTab] = useState<Tab>("learn");
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
-  const [localExerciseId, setLocalExerciseId] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(() => window.localStorage.getItem("gm-onboarding-complete") !== "true");
 
   const completedCount = progress.progress.completedLessons.length;
   const progressPercent = Math.round((completedCount / lessons.length) * 100);
@@ -46,11 +45,7 @@ function App() {
       <LessonPlayer
         lesson={activeLesson}
         speak={speech.speak}
-        onOpenLocal={(exerciseId) => {
-          setLocalExerciseId(exerciseId);
-          setActiveLesson(null);
-          setTab("local");
-        }}
+        onRecordLocal={(exercise, quality) => progress.recordReview(exercise.id, findLessonId(exercise.id), quality)}
         onBack={() => setActiveLesson(null)}
         onComplete={() => {
           progress.completeLesson(activeLesson.id);
@@ -66,10 +61,6 @@ function App() {
       <header className="topbar">
         <div className="brand-lockup">
           <img src="/gm-logo.png" alt="GM" />
-          <div>
-            <p>Germeade</p>
-            <h1>GM</h1>
-          </div>
         </div>
         <button className="icon-button" type="button" onClick={() => setTab("progress")} aria-label="Settings">
           <Settings size={21} />
@@ -83,6 +74,11 @@ function App() {
           weakCount={progress.weakCount}
           progressPercent={progressPercent}
           completedCount={completedCount}
+          showOnboarding={showOnboarding && completedCount === 0}
+          onDismissOnboarding={() => {
+            window.localStorage.setItem("gm-onboarding-complete", "true");
+            setShowOnboarding(false);
+          }}
           onStart={setActiveLesson}
           onReview={() => setTab("review")}
         />
@@ -98,14 +94,6 @@ function App() {
 
       {tab === "course" && (
         <CourseScreen completedSet={progress.completedSet} currentId={progress.nextLesson.id} onStart={setActiveLesson} />
-      )}
-
-      {tab === "local" && (
-        <LocalTextScreen
-          initialExerciseId={localExerciseId}
-          speak={speech.speak}
-          onRecord={(exercise, quality) => progress.recordReview(exercise.id, findLessonId(exercise.id), quality)}
-        />
       )}
 
       {tab === "progress" && (
@@ -130,7 +118,6 @@ function App() {
         <NavButton active={tab === "learn"} label="Learn" icon={<Home size={19} />} onClick={() => setTab("learn")} />
         <NavButton active={tab === "review"} label="Review" icon={<ListChecks size={19} />} onClick={() => setTab("review")} />
         <NavButton active={tab === "course"} label="Course" icon={<BookOpen size={19} />} onClick={() => setTab("course")} />
-        <NavButton active={tab === "local"} label="Local" icon={<MessageCircle size={19} />} onClick={() => setTab("local")} />
         <NavButton active={tab === "progress"} label="Progress" icon={<ShieldCheck size={19} />} onClick={() => setTab("progress")} />
       </nav>
     </main>
@@ -166,6 +153,8 @@ function LearnScreen({
   weakCount,
   progressPercent,
   completedCount,
+  showOnboarding,
+  onDismissOnboarding,
   onStart,
   onReview,
 }: {
@@ -174,6 +163,8 @@ function LearnScreen({
   weakCount: number;
   progressPercent: number;
   completedCount: number;
+  showOnboarding: boolean;
+  onDismissOnboarding: () => void;
   onStart: (lesson: Lesson) => void;
   onReview: () => void;
 }) {
@@ -183,6 +174,23 @@ function LearnScreen({
         <p>Today</p>
         <h2>Learn German that sticks.</h2>
       </div>
+
+      {showOnboarding && (
+        <div className="onboarding-card">
+          <div>
+            <span>Start here</span>
+            <strong>One lesson. Then review. Then use German.</strong>
+          </div>
+          <ol>
+            <li>Learn the pattern.</li>
+            <li>Answer without looking.</li>
+            <li>Review what comes back.</li>
+          </ol>
+          <button className="secondary-button" type="button" onClick={onDismissOnboarding}>
+            Got it
+          </button>
+        </div>
+      )}
 
       <div className="lesson-focus">
         <div className="lesson-meta">
@@ -231,13 +239,13 @@ function LessonPlayer({
   speak,
   onBack,
   onComplete,
-  onOpenLocal,
+  onRecordLocal,
 }: {
   lesson: Lesson;
   speak: (text: string) => void;
   onBack: () => void;
   onComplete: () => void;
-  onOpenLocal: (exerciseId: string) => void;
+  onRecordLocal: (exercise: Exercise, quality: Quality) => void;
 }) {
   const [index, setIndex] = useState(0);
   const exercise = lesson.exercises[index];
@@ -268,7 +276,7 @@ function LessonPlayer({
           if (isLast) onComplete();
           else setIndex((current) => current + 1);
         }}
-        onOpenLocal={onOpenLocal}
+        onRecordLocal={onRecordLocal}
       />
     </main>
   );
@@ -280,14 +288,14 @@ function ExerciseCard({
   actionLabel,
   onAction,
   onReviewQuality,
-  onOpenLocal,
+  onRecordLocal,
 }: {
   exercise: Exercise;
   speak: (text: string) => void;
   actionLabel?: string;
   onAction?: () => void;
   onReviewQuality?: (quality: Quality) => void;
-  onOpenLocal?: (exerciseId: string) => void;
+  onRecordLocal?: (exercise: Exercise, quality: Quality) => void;
 }) {
   const [selected, setSelected] = useState("");
   const [built, setBuilt] = useState<string[]>([]);
@@ -337,15 +345,17 @@ function ExerciseCard({
         </div>
       )}
 
-      <div className="phrase-block">
-        <div>
-          <strong>{exercise.de}</strong>
-          <span>{exercise.en}</span>
+      {exercise.type !== "localText" && (
+        <div className="phrase-block">
+          <div>
+            <strong>{exercise.de}</strong>
+            <span>{exercise.en}</span>
+          </div>
+          <button className="speak-button" type="button" onClick={() => speak(exercise.tts)} aria-label="Listen">
+            <Volume2 size={20} />
+          </button>
         </div>
-        <button className="speak-button" type="button" onClick={() => speak(exercise.tts)} aria-label="Listen">
-          <Volume2 size={20} />
-        </button>
-      </div>
+      )}
 
       {exercise.type === "builder" && (
         <div className="builder-area">
@@ -403,7 +413,7 @@ function ExerciseCard({
         </button>
       )}
 
-      {revealed && (
+      {revealed && exercise.type !== "localText" && (
         <div className={correct === false ? "feedback needs-work" : "feedback"}>
           {correct !== null && <strong>{correct ? "Correct" : "Review this one"}</strong>}
           {correct === false && <p>The correct answer is: {orderedAnswer}</p>}
@@ -412,11 +422,8 @@ function ExerciseCard({
         </div>
       )}
 
-      {exercise.type === "localText" && onOpenLocal && (
-        <button className="secondary-button" type="button" onClick={() => onOpenLocal(exercise.id)}>
-          <MessageCircle size={20} />
-          Text with a local
-        </button>
+      {exercise.type === "localText" && (
+        <LocalChatBox exercise={exercise} speak={speak} onRecord={(quality) => onRecordLocal?.(exercise, quality)} />
       )}
 
       {answered && onAction && (
@@ -519,19 +526,15 @@ type LocalResponse = {
   missionComplete: boolean;
 };
 
-function LocalTextScreen({
-  initialExerciseId,
+function LocalChatBox({
+  exercise,
   speak,
   onRecord,
 }: {
-  initialExerciseId: string | null;
+  exercise: Exercise;
   speak: (text: string) => void;
-  onRecord: (exercise: Exercise, quality: Quality) => void;
+  onRecord: (quality: Quality) => void;
 }) {
-  const localExercises = useMemo(() => allExercises.filter((exercise) => exercise.type === "localText"), []);
-  const initialExercise = localExercises.find((exercise) => exercise.id === initialExerciseId) ?? localExercises[0];
-  const [exerciseId, setExerciseId] = useState(initialExercise?.id ?? "");
-  const exercise = localExercises.find((item) => item.id === exerciseId) ?? localExercises[0];
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("");
@@ -539,25 +542,11 @@ function LocalTextScreen({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (initialExerciseId) setExerciseId(initialExerciseId);
-  }, [initialExerciseId]);
-
-  useEffect(() => {
-    if (!exercise) return;
     setMissionComplete(false);
     setStatus("");
     setInput("");
     setMessages([{ role: "local", text: greetingFor(exercise) }]);
   }, [exercise]);
-
-  if (!exercise) {
-    return (
-      <section className="screen empty-state">
-        <MessageCircle size={38} />
-        <h2>No local objectives yet.</h2>
-      </section>
-    );
-  }
 
   const send = async () => {
     const learnerText = input.trim();
@@ -594,7 +583,7 @@ function LocalTextScreen({
       ]);
       setMissionComplete(data.missionComplete);
       setStatus(data.missionComplete ? "Objective complete" : "Keep going in German");
-      if (data.missionComplete) onRecord(exercise, "good");
+      if (data.missionComplete) onRecord("good");
     } catch (error) {
       setMessages([
         ...nextMessages,
@@ -623,26 +612,13 @@ function LocalTextScreen({
   };
 
   return (
-    <section className="screen local-screen">
-      <div className="section-heading">
-        <p>Text with a local</p>
-        <h2>{exercise.objective}</h2>
-      </div>
-
-      <div className="local-toolbar">
-        <label>
-          Objective
-          <select value={exercise.id} onChange={(event) => setExerciseId(event.target.value)}>
-            {localExercises.map((item) => {
-              const lessonItem = lessons.find((lesson) => lesson.exercises.some((candidate) => candidate.id === item.id));
-              return (
-                <option key={item.id} value={item.id}>
-                  {lessonItem?.unit} · {lessonItem?.title}
-                </option>
-              );
-            })}
-          </select>
-        </label>
+    <div className="local-mini">
+      <div className="local-mini-head">
+        <div>
+          <span>Chatbox practice</span>
+          <strong>{exercise.objective}</strong>
+          <p>Starter: {exercise.targetAnswer}</p>
+        </div>
         <button className="speak-button" type="button" onClick={() => speak(exercise.targetAnswer ?? exercise.de)} aria-label="Hear target">
           <Volume2 size={20} />
         </button>
@@ -670,7 +646,7 @@ function LocalTextScreen({
           </button>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -689,13 +665,27 @@ function CourseScreen({
   currentId: string;
   onStart: (lesson: Lesson) => void;
 }) {
+  const [levelFilter, setLevelFilter] = useState<"all" | "A1" | "A2">("all");
+  const visibleLessons = lessons.filter((lessonItem) => levelFilter === "all" || lessonItem.level === levelFilter);
+
   return (
     <section className="screen course-list">
       <div className="section-heading">
         <p>Course map</p>
         <h2>A1.1 to A2.16</h2>
       </div>
-      {lessons.map((lessonItem) => {
+      <div className="course-tabs" role="tablist" aria-label="Course level">
+        <button className={levelFilter === "all" ? "active" : ""} type="button" onClick={() => setLevelFilter("all")}>
+          All
+        </button>
+        <button className={levelFilter === "A1" ? "active" : ""} type="button" onClick={() => setLevelFilter("A1")}>
+          A1
+        </button>
+        <button className={levelFilter === "A2" ? "active" : ""} type="button" onClick={() => setLevelFilter("A2")}>
+          A2
+        </button>
+      </div>
+      {visibleLessons.map((lessonItem) => {
         const complete = completedSet.has(lessonItem.id);
         const current = currentId === lessonItem.id;
         return (
