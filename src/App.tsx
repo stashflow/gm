@@ -116,6 +116,7 @@ function App() {
           weakCount={progress.weakCount}
           comfortCount={progress.comfortCount}
           reviewTotal={progress.reviewTotal}
+          conceptStats={progress.conceptStats}
           voices={speech.germanVoices}
           selectedVoiceURI={progress.progress.settings.voiceURI}
           speechRate={progress.progress.settings.speechRate}
@@ -404,8 +405,8 @@ function ExerciseCard({
 
       {revealed && (
         <div className={correct === false ? "feedback needs-work" : "feedback"}>
-          {correct !== null && <strong>{correct ? "Comfortable" : "Needs review"}</strong>}
-          {correct === false && <p>Answer: {orderedAnswer}</p>}
+          {correct !== null && <strong>{correct ? "Correct" : "Review this one"}</strong>}
+          {correct === false && <p>The correct answer is: {orderedAnswer}</p>}
           {exercise.pronunciation && <p>Say it like: {exercise.pronunciation}</p>}
           {exercise.note && <p>{exercise.note}</p>}
         </div>
@@ -722,6 +723,7 @@ function ProgressScreen({
   weakCount,
   comfortCount,
   reviewTotal,
+  conceptStats,
   voices,
   selectedVoiceURI,
   speechRate,
@@ -735,6 +737,7 @@ function ProgressScreen({
   weakCount: number;
   comfortCount: number;
   reviewTotal: number;
+  conceptStats: Array<{ tag: string; comfortable: number; weak: number; seen: number; total: number; score: number }>;
   voices: SpeechSynthesisVoice[];
   selectedVoiceURI: string;
   speechRate: number;
@@ -785,6 +788,20 @@ function ProgressScreen({
       <div className="retention-note">
         <strong>{reviewTotal} items in retention</strong>
         <p>Reviews come back sooner when missed and later when comfortable.</p>
+      </div>
+
+      <div className="concept-panel">
+        <strong>Concept tracking</strong>
+        {conceptStats.length === 0 && <p>Complete a unit to start tracking concepts.</p>}
+        {conceptStats.map((concept) => (
+          <div className="concept-row" key={concept.tag}>
+            <span>{concept.tag}</span>
+            <meter min="0" max="100" value={concept.score} />
+            <small>
+              {concept.comfortable} comfortable · {concept.weak} needs review
+            </small>
+          </div>
+        ))}
       </div>
 
       <button className="danger-button" type="button" onClick={onReset}>
