@@ -417,18 +417,49 @@ input:focus-visible {
 }
 
 .lesson-shell {
-  width: min(100%, 760px);
-  padding-bottom: 24px;
+  width: 100%;
+  min-height: 100vh;
+  margin: 0 auto;
+  background: var(--paper);
 }
 
 .lesson-header {
+  margin: 0;
+  padding: 12px 14px 10px;
   justify-content: flex-start;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.lesson-header > div {
+  min-width: 0;
+}
+
+.lesson-header h1 {
+  overflow: hidden;
+  font-size: clamp(1.3rem, 7vw, 2rem);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close-button {
+  border-color: var(--ink);
+  color: white;
+  background: var(--ink);
+}
+
+.lesson-progress-wrap {
+  position: sticky;
+  top: 69px;
+  z-index: 7;
+  padding: 10px 14px 8px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
 }
 
 .progress-track {
   width: 100%;
   height: 9px;
-  margin: 18px 0;
+  margin: 0;
   overflow: hidden;
   border: 1px solid var(--ink);
   border-radius: 999px;
@@ -444,19 +475,27 @@ input:focus-visible {
 }
 
 .exercise-card {
+  min-height: calc(100vh - 127px);
   display: grid;
+  align-content: start;
   gap: 16px;
-  padding: 24px 18px 18px;
+  padding: 26px 18px 22px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  animation: card-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .template-label {
+  display: none;
   width: fit-content;
   border-color: var(--ink);
   color: white;
   background: var(--ink);
 }
 
-.phrase-block {
+.phrase-block,
+.question-block {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 46px;
   gap: 12px;
@@ -467,12 +506,24 @@ input:focus-visible {
   background: #f8f8f4;
 }
 
+.question-block {
+  grid-template-columns: 1fr;
+  border-color: var(--ink);
+  background:
+    linear-gradient(90deg, rgba(255, 204, 23, 0.22), transparent 58%),
+    #fff;
+  box-shadow: inset 5px 0 0 var(--yellow);
+}
+
 .phrase-block strong,
-.phrase-block span {
+.phrase-block span,
+.question-block strong,
+.question-block span {
   display: block;
 }
 
-.phrase-block strong {
+.phrase-block strong,
+.question-block strong {
   overflow-wrap: anywhere;
   color: var(--ink);
   font-size: 1.28rem;
@@ -480,7 +531,8 @@ input:focus-visible {
   line-height: 1.25;
 }
 
-.phrase-block span {
+.phrase-block span,
+.question-block span {
   margin-top: 6px;
   color: var(--muted);
   line-height: 1.35;
@@ -538,6 +590,18 @@ input:focus-visible {
   box-shadow: inset 5px 0 0 var(--yellow);
 }
 
+.exercise-card.is-correct .choice.selected,
+.exercise-card.is-correct .built-sentence {
+  border-color: var(--green);
+  box-shadow: inset 5px 0 0 var(--green), 0 0 0 3px rgba(21, 122, 71, 0.08);
+}
+
+.exercise-card.is-incorrect .choice.selected,
+.exercise-card.is-incorrect .built-sentence {
+  border-color: var(--red);
+  box-shadow: inset 5px 0 0 var(--red), 0 0 0 3px rgba(221, 17, 26, 0.08);
+}
+
 .builder-area {
   display: grid;
   gap: 10px;
@@ -567,6 +631,7 @@ input:focus-visible {
   background: #eff8f2;
   color: var(--ink);
   font-weight: 750;
+  animation: feedback-in 160ms ease-out;
 }
 
 .feedback.needs-work {
@@ -583,6 +648,22 @@ input:focus-visible {
 
 .next-button {
   margin-top: 2px;
+}
+
+.exercise-card.is-correct {
+  animation: correct-pop 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.exercise-card.is-correct::before {
+  background: linear-gradient(90deg, var(--green), var(--yellow));
+}
+
+.exercise-card.is-incorrect {
+  animation: incorrect-shake 320ms cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+
+.exercise-card.is-incorrect::before {
+  background: linear-gradient(90deg, var(--ink), var(--red));
 }
 
 .manual-quality {
@@ -853,10 +934,7 @@ meter::-webkit-meter-optimum-value {
 }
 
 .local-mini-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 46px;
-  gap: 10px;
-  align-items: center;
+  display: block;
 }
 
 .chat-panel {
@@ -925,10 +1003,24 @@ meter::-webkit-meter-optimum-value {
     padding: 22px 22px 112px;
   }
 
-  .topbar,
-  .lesson-header {
+  .topbar {
     margin: -22px -22px 0;
     padding: 18px 22px;
+  }
+
+  .lesson-shell {
+    max-width: 760px;
+    border-right: 1px solid var(--line);
+    border-left: 1px solid var(--line);
+  }
+
+  .lesson-header {
+    padding: 16px 22px 12px;
+  }
+
+  .lesson-progress-wrap {
+    top: 79px;
+    padding: 12px 22px 10px;
   }
 
   .screen {
@@ -955,5 +1047,71 @@ meter::-webkit-meter-optimum-value {
   .lesson-focus,
   .exercise-card {
     padding: 28px 22px 22px;
+  }
+
+  .exercise-card {
+    min-height: calc(100vh - 143px);
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes feedback-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes correct-pop {
+  0% {
+    transform: scale(1);
+  }
+  42% {
+    transform: scale(1.012);
+    background: linear-gradient(180deg, rgba(255, 204, 23, 0.18), #fff 170px);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes incorrect-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  22% {
+    transform: translateX(-7px);
+  }
+  45% {
+    transform: translateX(6px);
+  }
+  68% {
+    transform: translateX(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

@@ -1,7 +1,7 @@
 import {
   BookOpen,
   Check,
-  ChevronLeft,
+  X,
   GraduationCap,
   Home,
   ListChecks,
@@ -266,10 +266,10 @@ function LessonPlayer({
   const isLast = index === lesson.exercises.length - 1;
 
   return (
-    <main className="app-shell lesson-shell">
+    <main className="lesson-shell">
       <header className="lesson-header">
-        <button className="icon-button" type="button" onClick={onBack} aria-label="Back">
-          <ChevronLeft size={22} />
+        <button className="icon-button close-button" type="button" onClick={onBack} aria-label="Close lesson">
+          <X size={22} />
         </button>
         <div>
           <p>
@@ -278,8 +278,10 @@ function LessonPlayer({
           <h1>{lesson.title}</h1>
         </div>
       </header>
-      <div className="progress-track">
-        <span style={{ width: `${((index + 1) / lesson.exercises.length) * 100}%` }} />
+      <div className="lesson-progress-wrap">
+        <div className="progress-track">
+          <span style={{ width: `${((index + 1) / lesson.exercises.length) * 100}%` }} />
+        </div>
       </div>
       <ExerciseCard
         key={exercise.id}
@@ -344,18 +346,29 @@ function ExerciseCard({
   };
 
   const isPassive = exercise.type === "teach" || exercise.type === "listenRepeat";
+  const visibleDe = exercise.displayDe ?? exercise.de;
+  const visibleEn = exercise.displayEn ?? exercise.en;
+  const showPhrase = !exercise.promptOnly && exercise.type !== "localText";
+  const leadText =
+    exercise.type === "localText" ? "Text in German." : exercise.promptOnly && visibleDe ? visibleDe : exercise.type === "builder" ? exercise.en : exercise.prompt;
 
   return (
-    <article className={`exercise-card ${exercise.type}`}>
-      <div className="template-label">{labelForType(exercise.type)}</div>
-      <h2>{exercise.title}</h2>
-      <p className="prompt">{exercise.prompt}</p>
+    <article className={`exercise-card ${exercise.type} ${correct === true ? "is-correct" : ""} ${correct === false ? "is-incorrect" : ""}`}>
+      <h2>{leadText}</h2>
+      {leadText !== exercise.prompt && exercise.type !== "localText" && <p className="prompt">{exercise.prompt}</p>}
 
-      {exercise.type !== "localText" && (
+      {exercise.promptOnly && visibleDe && visibleEn && (
+        <div className="question-block">
+          <strong>{visibleDe}</strong>
+          <span>{visibleEn}</span>
+        </div>
+      )}
+
+      {showPhrase && (
         <div className="phrase-block">
           <div>
-            <strong>{exercise.de}</strong>
-            <span>{exercise.en}</span>
+            <strong>{visibleDe}</strong>
+            {visibleEn && <span>{visibleEn}</span>}
           </div>
           <button className="speak-button" type="button" onClick={() => speak(exercise.tts)} aria-label="Listen">
             <Volume2 size={20} />
@@ -429,7 +442,7 @@ function ExerciseCard({
       )}
 
       {exercise.type === "localText" && (
-        <LocalChatBox exercise={exercise} speak={speak} onRecord={(quality) => onRecordLocal?.(exercise, quality)} />
+        <LocalChatBox exercise={exercise} onRecord={(quality) => onRecordLocal?.(exercise, quality)} />
       )}
 
       {answered && onAction && (
@@ -439,23 +452,6 @@ function ExerciseCard({
       )}
     </article>
   );
-}
-
-function labelForType(type: Exercise["type"]) {
-  const labels: Record<Exercise["type"], string> = {
-    teach: "Teach card",
-    listenRepeat: "Listen + repeat",
-    article: "Article trainer",
-    match: "Meaning match",
-    builder: "Sentence builder",
-    gap: "Fill the gap",
-    recall: "Active recall",
-    dialogue: "Mini dialogue",
-    football: "Football drill",
-    mixed: "Mixed review",
-    localText: "Text with a local",
-  };
-  return labels[type];
 }
 
 function ReviewScreen({
@@ -534,11 +530,9 @@ type LocalResponse = {
 
 function LocalChatBox({
   exercise,
-  speak,
   onRecord,
 }: {
   exercise: Exercise;
-  speak: (text: string) => void;
   onRecord: (quality: Quality) => void;
 }) {
   const [messages, setMessages] = useState<LocalMessage[]>([]);
@@ -573,7 +567,7 @@ function LocalChatBox({
             title: exercise.title,
             objective: exercise.objective,
             persona: exercise.persona,
-            targetAnswer: exercise.targetAnswer,
+            targetAnswer: Array.isArray(exercise.answer) ? exercise.answer.join(" ") : exercise.answer,
             tags: exercise.tags,
           },
           messages: nextMessages,
@@ -612,7 +606,7 @@ function LocalChatBox({
       ...current,
       {
         role: "coach",
-        text: `Try: "${exercise.targetAnswer}"`,
+        text: exercise.hint ?? "Think of the question or sentence from this lesson. Keep it short and German.",
       },
     ]);
   };
@@ -621,13 +615,9 @@ function LocalChatBox({
     <div className="local-mini">
       <div className="local-mini-head">
         <div>
-          <span>Mini chat</span>
-          <strong>Ask in German</strong>
-          <p>Starter: {exercise.targetAnswer}</p>
+          <strong>Use what you learned.</strong>
+          <p>{exercise.objective}</p>
         </div>
-        <button className="speak-button" type="button" onClick={() => speak(exercise.targetAnswer ?? exercise.de)} aria-label="Hear target">
-          <Volume2 size={20} />
-        </button>
       </div>
 
       <div className="chat-panel">

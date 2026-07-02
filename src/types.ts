@@ -37,6 +37,9 @@ export interface Exercise {
   pairs?: ExampleLine[];
   words?: string[];
   hint?: string;
+  displayDe?: string;
+  displayEn?: string;
+  promptOnly?: boolean;
   objective?: string;
   persona?: string;
   targetAnswer?: string;
