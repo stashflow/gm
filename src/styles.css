@@ -1565,6 +1565,53 @@ input:focus-visible {
   padding: 18px;
 }
 
+.settings-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 204, 23, 0.1), transparent 34%),
+    white;
+  box-shadow: var(--shadow-soft);
+}
+
+.settings-title {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 3px solid var(--ink);
+}
+
+.settings-title strong {
+  color: var(--ink);
+  font-family: var(--display-font);
+  font-size: 1.35rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.settings-title span {
+  color: var(--muted-strong);
+  font-weight: 800;
+}
+
+.settings-group {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--red);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.settings-group > strong {
+  color: var(--ink);
+  font-family: var(--display-font);
+  font-size: 1.05rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
 .can-do-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1640,6 +1687,7 @@ input:focus-visible {
 }
 
 .settings-panel select,
+.settings-panel input[type="number"],
 .composer textarea {
   width: 100%;
   min-height: 48px;
@@ -1653,6 +1701,7 @@ input:focus-visible {
 }
 
 .settings-panel select:focus,
+.settings-panel input[type="number"]:focus,
 .composer textarea:focus {
   border-color: var(--ink);
   box-shadow: 0 0 0 4px rgba(255, 204, 23, 0.24);
@@ -1672,11 +1721,56 @@ input:focus-visible {
   accent-color: var(--ink);
 }
 
+.toggle-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 58px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  text-transform: none;
+}
+
+.toggle-row span {
+  display: grid;
+  gap: 3px;
+}
+
+.toggle-row strong {
+  color: var(--ink);
+  font-size: 0.96rem;
+  font-weight: 950;
+}
+
+.toggle-row small {
+  color: var(--muted-strong);
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.toggle-row input {
+  width: 42px;
+  height: 26px;
+  accent-color: var(--ink);
+}
+
 .settings-help {
   margin: -6px 0 0;
   color: var(--muted-strong);
   font-weight: 750;
   line-height: 1.4;
+}
+
+.settings-help.warning {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(237, 28, 36, 0.28);
+  border-left: 5px solid var(--red);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(237, 28, 36, 0.06);
 }
 
 .retention-note strong,

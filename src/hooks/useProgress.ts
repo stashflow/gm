@@ -29,6 +29,10 @@ const emptyProgress = (): ProgressState => ({
   settings: {
     speechRate: 0.82,
     voiceURI: "",
+    speechMode: "auto",
+    reviewLimit: 5,
+    showPronunciation: true,
+    autoPlayGerman: false,
   },
 });
 
@@ -260,7 +264,10 @@ export function useProgress() {
     );
   }, [completedSet, progress.onboardingPath, progress.unlockedLessonIndex]);
 
-  const dailyReviewItems = useMemo(() => dueReviews.slice(0, 5), [dueReviews]);
+  const dailyReviewItems = useMemo(
+    () => dueReviews.slice(0, Math.min(20, Math.max(3, progress.settings.reviewLimit || 5))),
+    [dueReviews, progress.settings.reviewLimit],
+  );
   const dailyLocalExercise = useMemo(() => {
     const nextLocal = nextLesson.exercises.find((exercise) => exercise.type === "localText");
     return nextLocal ?? localObjectives.find((exercise) => !progress.lastQuality[exercise.id]) ?? localObjectives[0];

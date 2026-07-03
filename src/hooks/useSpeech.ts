@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-export function useSpeech(voiceURI: string, rate: number) {
+type SpeechMode = "auto" | "server" | "browser";
+
+const isAppleMobile = () =>
+  /iPad|iPhone|iPod/.test(window.navigator.userAgent) ||
+  (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+
+export function useSpeech(voiceURI: string, rate: number, mode: SpeechMode) {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [supported, setSupported] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [lastError, setLastError] = useState("");
   const unlockAttempted = useRef(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const speechRunRef = useRef(0);
   const retryTimers = useRef<number[]>([]);
 
@@ -44,6 +53,14 @@ export function useSpeech(voiceURI: string, rate: number) {
       window.removeEventListener("keydown", resume);
       window.speechSynthesis.cancel();
       utteranceRef.current = null;
+      try {
+        sourceRef.current?.stop();
+      } catch {
+        // Already stopped.
+      }
+      sourceRef.current = null;
+      audioContextRef.current?.close().catch(() => undefined);
+      audioContextRef.current = null;
       audioRef.current?.pause();
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
       audioUrlRef.current = null;
@@ -69,12 +86,19 @@ export function useSpeech(voiceURI: string, rate: number) {
       const runId = speechRunRef.current + 1;
       speechRunRef.current = runId;
       audioRef.current?.pause();
+      try {
+        sourceRef.current?.stop();
+      } catch {
+        // Already stopped.
+      }
+      sourceRef.current = null;
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
       audioRef.current = null;
       audioUrlRef.current = null;
+      setLastError("");
 
-      const playFallbackAudio = async () => {
-        if (speechRunRef.current !== runId || !("Audio" in window)) return;
+      const playServerAudio = async () => {
+        if (speechRunRef.current !== runId || !("Audio" in window)) return false;
         try {
           setSpeaking(true);
           const response = await fetch("/api/tts", {
@@ -84,16 +108,39 @@ export function useSpeech(voiceURI: string, rate: number) {
           });
           if (!response.ok || speechRunRef.current !== runId) {
             setSpeaking(false);
-            return;
+            setLastError(response.ok ? "" : "Server audio is unavailable. Using browser voice when possible.");
+            return false;
           }
 
-          const blob = await response.blob();
+          const audioBuffer = await response.arrayBuffer();
           if (speechRunRef.current !== runId) {
             setSpeaking(false);
-            return;
+            return false;
           }
 
-          const audioUrl = URL.createObjectURL(blob);
+          if ("AudioContext" in window || "webkitAudioContext" in window) {
+            const AudioContextClass = window.AudioContext ?? window.webkitAudioContext;
+            const context = audioContextRef.current ?? new AudioContextClass();
+            audioContextRef.current = context;
+            await context.resume();
+            const decoded = await context.decodeAudioData(audioBuffer.slice(0));
+            if (speechRunRef.current !== runId) {
+              setSpeaking(false);
+              return false;
+            }
+            const source = context.createBufferSource();
+            source.buffer = decoded;
+            source.connect(context.destination);
+            source.onended = () => {
+              if (speechRunRef.current === runId) setSpeaking(false);
+              if (sourceRef.current === source) sourceRef.current = null;
+            };
+            sourceRef.current = source;
+            source.start(0);
+            return true;
+          }
+
+          const audioUrl = URL.createObjectURL(new Blob([audioBuffer], { type: "audio/mpeg" }));
           const audio = new Audio(audioUrl);
           audioRef.current = audio;
           audioUrlRef.current = audioUrl;
@@ -112,60 +159,81 @@ export function useSpeech(voiceURI: string, rate: number) {
             if (speechRunRef.current === runId) setSpeaking(false);
           };
           await audio.play();
+          return true;
         } catch {
           if (speechRunRef.current === runId) setSpeaking(false);
+          setLastError("Audio did not start. Tap once more or check iPhone silent mode if Safari blocks all web audio.");
+          return false;
         }
       };
 
-      if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
-        void playFallbackAudio();
+      const hasBrowserSpeech = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+      const speakWithBrowser = () => {
+        if (!hasBrowserSpeech) {
+          void playServerAudio();
+          return;
+        }
+        const synth = window.speechSynthesis;
+        unlockAttempted.current = true;
+        synth.resume();
+        synth.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.lang = selectedVoice?.lang ?? "de-DE";
+        utterance.rate = Math.min(1, Math.max(0.55, rate || 0.82));
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        if (selectedVoice) utterance.voice = selectedVoice;
+        let started = false;
+        utterance.onstart = () => {
+          started = true;
+          setSpeaking(true);
+        };
+        utterance.onend = () => {
+          if (speechRunRef.current === runId) setSpeaking(false);
+          if (utteranceRef.current === utterance) utteranceRef.current = null;
+        };
+        utterance.onerror = () => {
+          if (utteranceRef.current === utterance) utteranceRef.current = null;
+          void playServerAudio();
+        };
+
+        utteranceRef.current = utterance;
+        synth.speak(utterance);
+
+        [0, 80, 250, 600].forEach((delay) => {
+          window.setTimeout(() => {
+            if (utteranceRef.current === utterance && synth.paused) synth.resume();
+          }, delay);
+        });
+
+        window.setTimeout(() => {
+          if (speechRunRef.current === runId && utteranceRef.current === utterance && !started && !synth.speaking) {
+            synth.cancel();
+            utteranceRef.current = null;
+            void playServerAudio();
+          }
+        }, 900);
+      };
+
+      const shouldTryServerFirst = mode === "server" || (mode === "auto" && isAppleMobile());
+      if (shouldTryServerFirst) {
+        void playServerAudio().then((played) => {
+          if (!played && mode !== "server") speakWithBrowser();
+        });
         return;
       }
 
-      const synth = window.speechSynthesis;
-      unlockAttempted.current = true;
-      synth.resume();
-      synth.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.lang = selectedVoice?.lang ?? "de-DE";
-      utterance.rate = Math.min(1, Math.max(0.55, rate || 0.82));
-      utterance.pitch = 1;
-      utterance.volume = 1;
-      if (selectedVoice) utterance.voice = selectedVoice;
-      let started = false;
-      utterance.onstart = () => {
-        started = true;
-        setSpeaking(true);
-      };
-      utterance.onend = () => {
-        if (speechRunRef.current === runId) setSpeaking(false);
-        if (utteranceRef.current === utterance) utteranceRef.current = null;
-      };
-      utterance.onerror = () => {
-        if (utteranceRef.current === utterance) utteranceRef.current = null;
-        void playFallbackAudio();
-      };
-
-      utteranceRef.current = utterance;
-      synth.speak(utterance);
-
-      [0, 80, 250, 600].forEach((delay) => {
-        window.setTimeout(() => {
-          if (utteranceRef.current === utterance && synth.paused) synth.resume();
-        }, delay);
-      });
-
-      window.setTimeout(() => {
-        if (speechRunRef.current === runId && utteranceRef.current === utterance && !started && !synth.speaking) {
-          synth.cancel();
-          utteranceRef.current = null;
-          void playFallbackAudio();
-        }
-      }, 900);
+      speakWithBrowser();
     },
-    [rate, selectedVoice, supported],
+    [mode, rate, selectedVoice, supported],
   );
 
-  return { voices, germanVoices, selectedVoice, speak, supported, speaking };
+  return { voices, germanVoices, selectedVoice, speak, supported, speaking, lastError };
+}
+
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
 }

@@ -104,5 +104,9 @@ export interface ProgressState {
   settings: {
     speechRate: number;
     voiceURI: string;
+    speechMode: "auto" | "server" | "browser";
+    reviewLimit: number;
+    showPronunciation: boolean;
+    autoPlayGerman: boolean;
   };
 }

@@ -19,6 +19,7 @@ import { useSpeech } from "./hooks/useSpeech";
 import type { Exercise, Lesson, LocalMemory, OnboardingPath, Quality } from "./types";
 
 type Tab = "learn" | "review" | "course" | "progress";
+type AppSettings = ReturnType<typeof useProgress>["progress"]["settings"];
 
 const normalize = (value: string) =>
   value
@@ -35,9 +36,40 @@ const normalize = (value: string) =>
 
 const qualityFromCorrect = (correct: boolean): Quality => (correct ? "good" : "again");
 
+const patternHintFor = (exercise: Exercise) => {
+  const text = normalize([exercise.prompt, exercise.de, exercise.en, exercise.answer ?? "", exercise.skillId ?? ""].flat().join(" "));
+  if (text.includes("ich heisse sam") || text.includes("someone asks your name") || text.includes("introduce name")) {
+    return "Use the pattern: Ich heiße + your name.";
+  }
+  if (text.includes("ich komme aus den usa") || text.includes("where you are from") || text.includes("say origin")) {
+    return "Use the pattern: Ich komme aus + your country or city.";
+  }
+  return "";
+};
+
+const matchesFlexiblePersonalAnswer = (exercise: Exercise, attempt: string) => {
+  if (exercise.reviewMode !== "typeIt") return false;
+  const value = normalize(attempt);
+  if (/\b(my name|your name|dein name|mein name)\b/.test(value) || value === "ich heisse name") return false;
+  const text = normalize([exercise.prompt, exercise.de, exercise.en, exercise.answer ?? "", exercise.skillId ?? ""].flat().join(" "));
+  const nameAnswer = /^(hallo )?ich heisse [a-z][a-z '\-]{1,}( und du)?$/.test(value);
+  if ((text.includes("ich heisse sam") || text.includes("someone asks your name") || text.includes("introduce name")) && nameAnswer) {
+    return true;
+  }
+  const originAnswer = /^ich (komme|bin) aus [a-z][a-z '\-]{1,}$/.test(value);
+  if ((text.includes("ich komme aus den usa") || text.includes("where you are from") || text.includes("say origin")) && originAnswer) {
+    return true;
+  }
+  return false;
+};
+
 function App() {
   const progress = useProgress();
-  const speech = useSpeech(progress.progress.settings.voiceURI, progress.progress.settings.speechRate);
+  const speech = useSpeech(
+    progress.progress.settings.voiceURI,
+    progress.progress.settings.speechRate,
+    progress.progress.settings.speechMode,
+  );
   const [tab, setTab] = useState<Tab>("learn");
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const [activeLocalExercise, setActiveLocalExercise] = useState<Exercise | null>(null);
@@ -55,6 +87,7 @@ function App() {
         lesson={activeLesson}
         speak={speech.speak}
         speechSupported={speech.supported}
+        settings={progress.progress.settings}
         onRecordLocal={(exercise, quality) => progress.recordReview(exercise.id, findLessonId(exercise.id), quality)}
         localMemory={progress.progress.localMemory}
         onLocalExchange={progress.recordLocalExchange}
@@ -74,6 +107,7 @@ function App() {
         exercise={activeLocalExercise}
         speak={speech.speak}
         speechSupported={speech.supported}
+        settings={progress.progress.settings}
         onBack={() => setActiveLocalExercise(null)}
         onRecord={(exercise, quality) => progress.recordReview(exercise.id, findLessonId(exercise.id), quality)}
         localMemory={progress.progress.localMemory}
@@ -118,6 +152,7 @@ function App() {
           dueIds={progress.dailyReviewItems.map((item) => item.exerciseId)}
           speak={speech.speak}
           speechSupported={speech.supported}
+          settings={progress.progress.settings}
           onRecord={(exercise, quality) => progress.recordReview(exercise.id, findLessonId(exercise.id), quality)}
           localMemory={progress.progress.localMemory}
           onLocalExchange={progress.recordLocalExchange}
@@ -139,12 +174,11 @@ function App() {
           conceptStats={progress.conceptStats}
           canDoProgress={progress.canDoProgress}
           voices={speech.germanVoices}
-          selectedVoiceURI={progress.progress.settings.voiceURI}
-          speechRate={progress.progress.settings.speechRate}
+          settings={progress.progress.settings}
+          speechError={speech.lastError}
           speechSupported={speech.supported}
           onTestVoice={() => speech.speak("Hallo, ich lerne Deutsch.")}
-          onVoice={(voiceURI) => progress.updateSettings({ voiceURI })}
-          onRate={(speechRate) => progress.updateSettings({ speechRate })}
+          onSettings={progress.updateSettings}
           onReset={progress.resetProgress}
         />
       )}
@@ -336,6 +370,7 @@ function LessonPlayer({
   lesson,
   speak,
   speechSupported,
+  settings,
   onBack,
   onComplete,
   onRecordLocal,
@@ -345,6 +380,7 @@ function LessonPlayer({
   lesson: Lesson;
   speak: (text: string) => void;
   speechSupported: boolean;
+  settings: AppSettings;
   onBack: () => void;
   onComplete: () => void;
   onRecordLocal: (exercise: Exercise, quality: Quality) => void;
@@ -378,6 +414,7 @@ function LessonPlayer({
         exercise={exercise}
         speak={speak}
         speechSupported={speechSupported}
+        settings={settings}
         actionLabel={isLast ? "Finish lesson" : "Next"}
         onAction={() => {
           if (isLast) onComplete();
@@ -395,6 +432,7 @@ function LocalPracticePlayer({
   exercise,
   speak,
   speechSupported,
+  settings,
   onBack,
   onComplete,
   onRecord,
@@ -404,6 +442,7 @@ function LocalPracticePlayer({
   exercise: Exercise;
   speak: (text: string) => void;
   speechSupported: boolean;
+  settings: AppSettings;
   onBack: () => void;
   onComplete: () => void;
   onRecord: (exercise: Exercise, quality: Quality) => void;
@@ -425,6 +464,7 @@ function LocalPracticePlayer({
         exercise={exercise}
         speak={speak}
         speechSupported={speechSupported}
+        settings={settings}
         actionLabel="Finish text"
         onAction={onComplete}
         onRecordLocal={onRecord}
@@ -439,6 +479,7 @@ function ExerciseCard({
   exercise,
   speak,
   speechSupported,
+  settings,
   actionLabel,
   onAction,
   onReviewQuality,
@@ -449,6 +490,7 @@ function ExerciseCard({
   exercise: Exercise;
   speak: (text: string) => void;
   speechSupported: boolean;
+  settings: AppSettings;
   actionLabel?: string;
   onAction?: () => void;
   onReviewQuality?: (quality: Quality) => void;
@@ -475,6 +517,12 @@ function ExerciseCard({
     setCorrect(null);
   }, [exercise.id, exercise.type]);
 
+  useEffect(() => {
+    if (!settings.autoPlayGerman || !speechSupported || exercise.type === "localText") return;
+    const timer = window.setTimeout(() => speak(exercise.tts || exercise.de), 220);
+    return () => window.clearTimeout(timer);
+  }, [exercise.de, exercise.id, exercise.tts, exercise.type, settings.autoPlayGerman, speak, speechSupported]);
+
   const orderedAnswer = Array.isArray(exercise.answer) ? exercise.answer.join(" ") : exercise.answer ?? exercise.de;
   const options = exercise.options ?? [];
   const remainingWords = options.map((word, index) => ({ word, index })).filter((item) => !built.includes(item.index));
@@ -487,7 +535,8 @@ function ExerciseCard({
           ? typed
           : selected;
     const acceptable = [orderedAnswer, ...(exercise.acceptableAnswers ?? [])];
-    const isCorrect = acceptable.some((answer) => normalize(attempt) === normalize(answer));
+    const isCorrect =
+      acceptable.some((answer) => normalize(attempt) === normalize(answer)) || matchesFlexiblePersonalAnswer(exercise, attempt);
     setCorrect(isCorrect);
     setAnswered(true);
     setRevealed(true);
@@ -498,6 +547,7 @@ function ExerciseCard({
   const visibleDe = exercise.displayDe ?? exercise.de;
   const visibleEn = exercise.displayEn ?? exercise.en;
   const showPhrase = !exercise.promptOnly && exercise.type !== "localText" && exercise.type !== "builder";
+  const patternHint = patternHintFor(exercise);
   const showFeedbackListen = speechSupported && (!showPhrase || correct === false);
   const leadText =
     exercise.type === "localText"
@@ -614,8 +664,8 @@ function ExerciseCard({
       {revealed && exercise.type !== "localText" && (
         <div className={correct === false ? "feedback needs-work" : "feedback"}>
           {correct !== null && <strong>{correct ? "Correct" : "Review this one"}</strong>}
-          {correct === false && <p>The correct answer is: {orderedAnswer}</p>}
-          {exercise.pronunciation && <p>Say it like: {exercise.pronunciation}</p>}
+          {correct === false && <p>{patternHint || `The correct answer is: ${orderedAnswer}`}</p>}
+          {settings.showPronunciation && exercise.pronunciation && <p>Say it like: {exercise.pronunciation}</p>}
           {exercise.note && <p>{exercise.note}</p>}
           {showFeedbackListen && (
             <button className="feedback-listen" type="button" onClick={() => speak(orderedAnswer)}>
@@ -649,6 +699,7 @@ function ReviewScreen({
   dueIds,
   speak,
   speechSupported,
+  settings,
   onRecord,
   localMemory,
   onLocalExchange,
@@ -656,6 +707,7 @@ function ReviewScreen({
   dueIds: string[];
   speak: (text: string) => void;
   speechSupported: boolean;
+  settings: AppSettings;
   onRecord: (exercise: Exercise, quality: Quality) => void;
   localMemory: LocalMemory;
   onLocalExchange: (text: string, objective?: string) => void;
@@ -695,6 +747,7 @@ function ReviewScreen({
         exercise={exercise}
         speak={speak}
         speechSupported={speechSupported}
+        settings={settings}
         actionLabel={completed.length + 1 >= dueIds.length ? "Finish review" : "Next review"}
         onAction={() => {
           if (!pendingQuality) return;
@@ -989,12 +1042,11 @@ function ProgressScreen({
   conceptStats,
   canDoProgress,
   voices,
-  selectedVoiceURI,
-  speechRate,
+  settings,
+  speechError,
   speechSupported,
   onTestVoice,
-  onVoice,
-  onRate,
+  onSettings,
   onReset,
 }: {
   completedCount: number;
@@ -1006,12 +1058,11 @@ function ProgressScreen({
   conceptStats: Array<{ tag: string; comfortable: number; weak: number; seen: number; total: number; score: number }>;
   canDoProgress: Array<{ id: string; text: string; lessonId: string; level: "A1" | "A2"; status: string }>;
   voices: SpeechSynthesisVoice[];
-  selectedVoiceURI: string;
-  speechRate: number;
+  settings: AppSettings;
+  speechError: string;
   speechSupported: boolean;
   onTestVoice: () => void;
-  onVoice: (voiceURI: string) => void;
-  onRate: (rate: number) => void;
+  onSettings: (settings: Partial<AppSettings>) => void;
   onReset: () => void;
 }) {
   return (
@@ -1039,34 +1090,83 @@ function ProgressScreen({
       </div>
 
       <div className="settings-panel">
-        <label>
-          German voice
-          <select value={selectedVoiceURI} onChange={(event) => onVoice(event.target.value)}>
-            <option value="">Default German voice</option>
-            {voices.map((voice) => (
-              <option key={voice.voiceURI} value={voice.voiceURI}>
-                {voice.name} ({voice.lang})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Speech rate
-          <input
-            type="range"
-            min="0.65"
-            max="1.05"
-            step="0.05"
-            value={speechRate}
-            onChange={(event) => onRate(Number(event.target.value))}
+        <div className="settings-title">
+          <strong>Settings</strong>
+          <span>Make practice fit how you learn.</span>
+        </div>
+
+        <div className="settings-group">
+          <strong>Audio</strong>
+          <label>
+            Playback
+            <select value={settings.speechMode} onChange={(event) => onSettings({ speechMode: event.target.value as AppSettings["speechMode"] })}>
+              <option value="auto">Auto: best for this device</option>
+              <option value="server">Always-on audio first</option>
+              <option value="browser">Browser voice first</option>
+            </select>
+          </label>
+          <label>
+            German voice
+            <select value={settings.voiceURI} onChange={(event) => onSettings({ voiceURI: event.target.value })}>
+              <option value="">Default German voice</option>
+              {voices.map((voice) => (
+                <option key={voice.voiceURI} value={voice.voiceURI}>
+                  {voice.name} ({voice.lang})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Speech rate
+            <input
+              type="range"
+              min="0.65"
+              max="1.05"
+              step="0.05"
+              value={settings.speechRate}
+              onChange={(event) => onSettings({ speechRate: Number(event.target.value) })}
+            />
+            <span>{settings.speechRate.toFixed(2)}x</span>
+          </label>
+          <button className="secondary-button" type="button" onClick={onTestVoice} disabled={!speechSupported}>
+            <Volume2 size={18} />
+            {speechSupported ? "Test German voice" : "Speech unavailable"}
+          </button>
+          {speechError && <p className="settings-help warning">{speechError}</p>}
+          {!speechSupported && <p className="settings-help warning">This browser does not expose audio playback.</p>}
+        </div>
+
+        <div className="settings-group">
+          <strong>Practice</strong>
+          <label>
+            Daily review cards
+            <input
+              type="range"
+              min="3"
+              max="20"
+              step="1"
+              value={settings.reviewLimit}
+              onChange={(event) => onSettings({ reviewLimit: Number(event.target.value) })}
+            />
+            <span>{settings.reviewLimit} cards</span>
+          </label>
+          <ToggleRow
+            label="Auto-play German"
+            detail="Start audio when a lesson card opens."
+            checked={settings.autoPlayGerman}
+            onChange={(autoPlayGerman) => onSettings({ autoPlayGerman })}
           />
-          <span>{speechRate.toFixed(2)}x</span>
-        </label>
-        <button className="secondary-button" type="button" onClick={onTestVoice} disabled={!speechSupported}>
-          <Volume2 size={18} />
-          {speechSupported ? "Test German voice" : "Speech unavailable"}
-        </button>
-        {!speechSupported && <p className="settings-help">This browser does not expose text to speech.</p>}
+        </div>
+
+        <div className="settings-group">
+          <strong>Display</strong>
+          <ToggleRow
+            label="Pronunciation hints"
+            detail="Show the simple say-it guide after answers."
+            checked={settings.showPronunciation}
+            onChange={(showPronunciation) => onSettings({ showPronunciation })}
+          />
+        </div>
       </div>
 
       <div className="retention-note">
@@ -1093,6 +1193,28 @@ function ProgressScreen({
         Reset progress
       </button>
     </section>
+  );
+}
+
+function ToggleRow({
+  label,
+  detail,
+  checked,
+  onChange,
+}: {
+  label: string;
+  detail: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="toggle-row">
+      <span>
+        <strong>{label}</strong>
+        <small>{detail}</small>
+      </span>
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+    </label>
   );
 }
 
