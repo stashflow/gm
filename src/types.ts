@@ -18,6 +18,15 @@ export type OnboardingPath = "new" | "basics" | "travel";
 export type ReviewMode = "hearIt" | "typeIt" | "buildIt" | "chooseArticle" | "respondInChat";
 export type CanDoStatus = "locked" | "practicing" | "comfortable";
 
+export interface LocalMemory {
+  name: string;
+  personality: string;
+  relationship: string;
+  facts: string[];
+  exchanges: number;
+  lastObjective?: string;
+}
+
 export interface ExampleLine {
   de: string;
   en: string;
@@ -91,6 +100,7 @@ export interface ProgressState {
   canDoState: Record<string, CanDoStatus>;
   conceptMastery: Record<string, { comfortable: number; weak: number; seen: number; total: number; score: number }>;
   reviewHistory: Record<string, Array<{ at: number; quality: Quality; reviewMode?: ReviewMode }>>;
+  localMemory: LocalMemory;
   settings: {
     speechRate: number;
     voiceURI: string;

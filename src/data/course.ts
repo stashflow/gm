@@ -113,7 +113,7 @@ const typeOrGap = (unit: UnitDefinition, skill: MicroSkill): Draft => ({
 
 const localText = (unit: UnitDefinition, skill: MicroSkill, lessonNumber: number): Draft => ({
   type: "localText",
-  title: "Text in German",
+  title: "Type in German",
   prompt: skill.localObjective,
   de: skill.localTarget,
   en: "",
@@ -273,7 +273,7 @@ const units: UnitDefinition[] = [
         replyAnswer: "Ich heiße Sam.",
         replyChoices: ["Ich heiße Sam.", "Ich komme aus den USA.", "Ich spreche Deutsch."],
         localObjective: "Introduce yourself.",
-        localPersona: "You are Lena. Ask the learner's name and reply warmly.",
+        localPersona: "You are Lukas from Berlin. Ask the learner's name and reply warmly.",
         localTarget: "Hallo, ich heiße Sam.",
       }),
       s({
@@ -300,7 +300,7 @@ const units: UnitDefinition[] = [
         replyAnswer: "Ich heiße Sam.",
         replyChoices: ["Ich heiße Sam.", "Aus den USA.", "Ein bisschen."],
         localObjective: "Ask the local's name.",
-        localPersona: "You are Lena from Hamburg. Your name is Lena.",
+        localPersona: "You are Lukas from Berlin. Your name is Lukas.",
         localTarget: "Wie heißt du?",
       }),
       s({
@@ -327,7 +327,7 @@ const units: UnitDefinition[] = [
         replyAnswer: "Ich komme aus den USA.",
         replyChoices: ["Ich komme aus den USA.", "Ich heiße Sam.", "Ich wohne in Berlin."],
         localObjective: "Tell the local where you are from.",
-        localPersona: "You are Mira from Köln. Ask where the learner is from.",
+        localPersona: "You are Lukas from Berlin. Ask where the learner is from.",
         localTarget: "Ich komme aus den USA.",
       }),
       s({
@@ -354,7 +354,7 @@ const units: UnitDefinition[] = [
         replyAnswer: "Woher kommst du?",
         replyChoices: ["Woher kommst du?", "Wie heißt du?", "Was kostet das?"],
         localObjective: "Find out where the local comes from.",
-        localPersona: "You are Jonas from Berlin.",
+        localPersona: "You are Lukas from Berlin.",
         localTarget: "Woher kommst du?",
       }),
       s({
@@ -431,7 +431,7 @@ const units: UnitDefinition[] = [
         gapChoices: ["Und", "Aus", "Mit"],
         builderPrompt: "Build: My name is Sam. And you?",
         builderAnswer: ["Ich", "heiße", "Sam.", "Und", "du?"],
-        replyPrompt: "Someone says: Ich heiße Lena.",
+        replyPrompt: "Someone says: Ich heiße Lukas.",
         replyAnswer: "Ich heiße Sam. Und du?",
         replyChoices: ["Ich heiße Sam. Und du?", "Um acht Uhr.", "Ich möchte Kaffee."],
         localObjective: "Answer and ask back.",
@@ -448,7 +448,7 @@ const units: UnitDefinition[] = [
     track: "core",
     focus: ["conversation survival", "politeness"],
     lessons: [
-      makeSkill("Morning greeting", "You can greet someone in the morning.", "greet-morning", "conversation survival", "Small talk: morning", "Guten Morgen.", "Good morning.", "GOO-ten MOR-gen.", "Use Guten Morgen in the morning.", "Guten Morgen, Lena.", "Good morning, Lena.", "Which phrase means good morning?", "Guten Morgen.", ["Guten Morgen.", "Guten Abend.", "Gute Nacht."], "Complete: Guten ___.", "Morgen", ["Morgen", "Abend", "Tag"], "Build: Good morning.", ["Guten", "Morgen."], "It is morning.", "Guten Morgen.", ["Guten Morgen.", "Gute Nacht.", "Tschüss."], "Greet the local in the morning.", "You are a neighbor in the morning.", "Guten Morgen."),
+      makeSkill("Morning greeting", "You can greet someone in the morning.", "greet-morning", "conversation survival", "Small talk: morning", "Guten Morgen.", "Good morning.", "GOO-ten MOR-gen.", "Use Guten Morgen in the morning.", "Guten Morgen, Lukas.", "Good morning, Lukas.", "Which phrase means good morning?", "Guten Morgen.", ["Guten Morgen.", "Guten Abend.", "Gute Nacht."], "Complete: Guten ___.", "Morgen", ["Morgen", "Abend", "Tag"], "Build: Good morning.", ["Guten", "Morgen."], "It is morning.", "Guten Morgen.", ["Guten Morgen.", "Gute Nacht.", "Tschüss."], "Greet the local in the morning.", "You are Lukas, a neighbor in the morning.", "Guten Morgen."),
       makeSkill("Say thank you", "You can thank someone.", "say-thanks", "politeness", "Cafe: paying", "Danke schön.", "Thank you very much.", "DAHN-kuh shurn.", "Danke is the core word for thank you.", "Danke.", "Thanks.", "Which phrase thanks someone?", "Danke schön.", ["Danke schön.", "Bitte schön.", "Guten Morgen."], "Complete: Danke ___.", "schön", ["schön", "bitte", "morgen"], "Build: Thank you.", ["Danke", "schön."], "Someone helps you.", "Danke schön.", ["Danke schön.", "Guten Morgen.", "Ich heiße Sam."], "Thank the local.", "You helped the learner find a cafe.", "Danke schön."),
       makeSkill("Say please", "You can use bitte when asking.", "say-please", "politeness", "Cafe: ordering", "Einen Kaffee, bitte.", "A coffee, please.", "EYE-nen kah-FAY BIT-tuh.", "Bitte can mean please.", "Wasser, bitte.", "Water, please.", "Which word makes the order polite?", "bitte", ["bitte", "danke", "hallo"], "Complete: Einen Kaffee, ___.", "bitte", ["bitte", "danke", "morgen"], "Build: A coffee, please.", ["Einen", "Kaffee,", "bitte."], "Order politely.", "Einen Kaffee, bitte.", ["Einen Kaffee, bitte.", "Danke Kaffee.", "Guten Kaffee."], "Order politely from the local.", "You are a cafe worker.", "Einen Kaffee, bitte."),
       makeSkill("You're welcome", "You can answer thanks with bitte.", "youre-welcome", "politeness", "Cafe: thanks", "Bitte schön.", "You're welcome.", "BIT-tuh shurn.", "Bitte can also mean you're welcome.", "Danke. Bitte.", "Thanks. You're welcome.", "What can answer Danke?", "Bitte schön.", ["Bitte schön.", "Guten Tag.", "Ich komme."], "Complete: Bitte ___.", "schön", ["schön", "danke", "Uhr"], "Build: You're welcome.", ["Bitte", "schön."], "Someone says: Danke.", "Bitte schön.", ["Bitte schön.", "Guten Morgen.", "Ich heiße Sam."], "Answer thanks politely.", "You just helped the learner.", "Bitte schön."),
@@ -666,7 +666,11 @@ function unit(
       const replyChoices = [phrase, entries[(index + 1) % entries.length][0], entries[(index + 2) % entries.length][0]];
       return {
         title: baseTitle,
-        canDo: `You can use: ${articlePhrase}.`,
+        canDo: articleLike
+          ? `You can recognize ${articlePhrase}.`
+          : isQuestion
+            ? `You can ask "${phrase}"`
+            : `You can say "${phrase}"`,
         skillId: `${id}-${index + 1}`,
         concept,
         scene: `${theme}: ${baseTitle}`,

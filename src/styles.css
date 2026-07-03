@@ -8,6 +8,7 @@
   --ink: #090909;
   --ink-2: #191919;
   --muted: #696969;
+  --muted-strong: #4e4e4e;
   --paper: #ffffff;
   --off: #f7f7f4;
   --line: #e2e2dc;
@@ -320,7 +321,7 @@ input:focus-visible {
 .concept-panel p,
 .objective-card p {
   margin: 0;
-  color: var(--muted);
+  color: var(--muted-strong);
   line-height: 1.5;
 }
 
@@ -503,7 +504,7 @@ input:focus-visible {
 .daily-card span,
 .daily-card p {
   display: block;
-  color: var(--muted);
+  color: var(--muted-strong);
   font-weight: 750;
   line-height: 1.35;
 }
@@ -630,7 +631,7 @@ input:focus-visible {
 .metric span {
   display: block;
   margin-top: 8px;
-  color: var(--muted);
+  color: var(--muted-strong);
   font-size: 0.82rem;
   font-weight: 800;
 }
@@ -780,7 +781,7 @@ input:focus-visible {
   display: grid;
   align-content: start;
   gap: 16px;
-  padding: 26px 18px 22px;
+  padding: 26px 18px max(22px, calc(92px + var(--safe-bottom)));
   border: 0;
   border-radius: 0;
   background:
@@ -859,10 +860,13 @@ input:focus-visible {
   --card-c: var(--red);
   --card-tint: rgba(0, 0, 0, 0.055);
   background:
-    linear-gradient(140deg, rgba(0, 0, 0, 0.92) 0 132px, transparent 132px),
-    linear-gradient(155deg, rgba(255, 204, 23, 0.19), transparent 45%),
+    linear-gradient(140deg, rgba(0, 0, 0, 0.95) 0 132px, transparent 132px),
+    linear-gradient(155deg, rgba(255, 204, 23, 0.16), transparent 45%),
     var(--paper);
   animation-name: card-rise;
+  min-height: calc(var(--app-height) - var(--lesson-head));
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding-bottom: max(14px, var(--safe-bottom));
 }
 
 .exercise-card::before {
@@ -878,7 +882,7 @@ input:focus-visible {
   width: 84px;
   height: 84px;
   background: linear-gradient(135deg, var(--card-a), var(--card-b));
-  opacity: 0.96;
+  opacity: 0.18;
   clip-path: polygon(100% 0, 22% 0, 100% 78%);
   z-index: 0;
   transition: transform 540ms var(--ease-out), opacity var(--fast);
@@ -894,7 +898,7 @@ input:focus-visible {
   height: 116px;
   background:
     linear-gradient(90deg, var(--ink) 0 33%, var(--red) 33% 66%, var(--yellow) 66%);
-  opacity: 0.88;
+  opacity: 0.2;
   clip-path: polygon(100% 0, 8% 0, 100% 92%);
 }
 
@@ -926,8 +930,13 @@ input:focus-visible {
   clip-path: polygon(100% 0, 8% 0, 100% 80%);
 }
 
+.exercise-card.localText::after {
+  opacity: 0.92;
+}
+
 .exercise-card h2 {
   max-width: min(100%, 640px);
+  text-wrap: balance;
 }
 
 .exercise-card h2::after {
@@ -942,6 +951,9 @@ input:focus-visible {
 
 .exercise-card.localText h2 {
   color: white;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.45),
+    0 10px 24px rgba(0, 0, 0, 0.5);
 }
 
 .exercise-card.localText h2::after {
@@ -999,7 +1011,7 @@ input:focus-visible {
 .phrase-block span,
 .question-block span {
   margin-top: 6px;
-  color: var(--muted);
+  color: var(--muted-strong);
   line-height: 1.35;
 }
 
@@ -1122,8 +1134,7 @@ input:focus-visible {
 
 .choice,
 .word-bank button,
-.built-sentence,
-.manual-quality button {
+.built-sentence {
   min-height: 54px;
   padding: 13px 14px;
   border: 2px solid var(--line-strong);
@@ -1132,20 +1143,19 @@ input:focus-visible {
   background: white;
   text-align: left;
   font-weight: 850;
+  overflow-wrap: anywhere;
   transition: border-color var(--fast), box-shadow var(--fast), transform var(--spring), background var(--fast), color var(--fast);
 }
 
 .choice:hover,
-.word-bank button:hover,
-.manual-quality button:hover {
+.word-bank button:hover {
   border-color: var(--ink);
   transform: translateY(-2px);
   box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.08);
 }
 
 .choice:active,
-.word-bank button:active,
-.manual-quality button:active {
+.word-bank button:active {
   transform: scale(var(--tap-scale));
   box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.08);
 }
@@ -1251,6 +1261,7 @@ input:focus-visible {
   box-shadow: inset 0 -6px 0 var(--yellow);
   text-align: center;
   font-size: 1.05rem;
+  overflow-wrap: anywhere;
 }
 
 .word-bank {
@@ -1364,6 +1375,14 @@ input:focus-visible {
   box-shadow: 5px 5px 0 var(--card-b);
 }
 
+.exercise-card > .primary-button:not(.feedback-listen),
+.exercise-card > .secondary-button:not(.feedback-listen) {
+  position: sticky;
+  bottom: max(12px, calc(10px + var(--safe-bottom)));
+  z-index: 5;
+  margin-top: auto;
+}
+
 .exercise-card .secondary-button {
   background:
     linear-gradient(90deg, rgba(255, 204, 23, 0.18), white);
@@ -1386,14 +1405,29 @@ input:focus-visible {
   background: linear-gradient(90deg, var(--ink), var(--red));
 }
 
-.manual-quality {
+.review-session-note {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 7px solid var(--red);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(255, 204, 23, 0.12), transparent 48%),
+    white;
+  box-shadow: var(--shadow-soft);
 }
 
-.manual-quality button {
-  text-align: center;
+.review-session-note strong {
+  color: var(--ink);
+  font-weight: 950;
+}
+
+.review-session-note span {
+  color: var(--muted-strong);
+  font-size: 0.9rem;
+  font-weight: 750;
+  line-height: 1.35;
 }
 
 .empty-state {
@@ -1625,7 +1659,8 @@ input:focus-visible {
 }
 
 .composer textarea {
-  min-height: 96px;
+  min-height: 88px;
+  max-height: 26svh;
   padding: 12px;
   resize: vertical;
   line-height: 1.45;
@@ -1639,7 +1674,7 @@ input:focus-visible {
 
 .settings-help {
   margin: -6px 0 0;
-  color: var(--muted);
+  color: var(--muted-strong);
   font-weight: 750;
   line-height: 1.4;
 }
@@ -1667,7 +1702,7 @@ input:focus-visible {
 }
 
 .concept-row small {
-  color: var(--muted);
+  color: var(--muted-strong);
   font-weight: 700;
 }
 
@@ -1710,12 +1745,62 @@ meter::-webkit-meter-optimum-value {
 }
 
 .local-mini {
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   border: 1px solid rgba(9, 9, 9, 0.18);
   border-radius: 12px;
   background:
     linear-gradient(135deg, rgba(255, 204, 23, 0.13), transparent 45%),
     #fff;
   box-shadow: var(--shadow-soft);
+}
+
+.local-contact {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(9, 9, 9, 0.12);
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, rgba(0, 122, 255, 0.08), transparent),
+    #fff;
+}
+
+.local-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  color: white;
+  background:
+    linear-gradient(135deg, var(--ink) 0 58%, var(--red) 58% 76%, var(--yellow) 76%);
+  font-family: var(--display-font);
+  font-size: 1.4rem;
+  font-weight: 950;
+  box-shadow: 3px 3px 0 var(--yellow);
+}
+
+.local-contact strong,
+.local-contact span {
+  display: block;
+}
+
+.local-contact strong {
+  color: var(--ink);
+  font-weight: 950;
+}
+
+.local-contact span {
+  margin-top: 2px;
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1.2;
 }
 
 .onboarding-card span,
@@ -1749,7 +1834,7 @@ meter::-webkit-meter-optimum-value {
   gap: 7px;
   margin: 0;
   padding-left: 20px;
-  color: var(--muted);
+  color: var(--muted-strong);
   font-weight: 750;
 }
 
@@ -1769,10 +1854,11 @@ meter::-webkit-meter-optimum-value {
   display: grid;
   align-content: start;
   gap: 10px;
-  max-height: 36svh;
-  min-height: 236px;
+  max-height: none;
+  min-height: 0;
   padding: 14px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background:
     linear-gradient(180deg, #f7f7f8, #ffffff);
   border-radius: 14px;
@@ -1782,7 +1868,8 @@ meter::-webkit-meter-optimum-value {
 .bubble {
   display: grid;
   gap: 4px;
-  width: min(88%, 420px);
+  width: fit-content;
+  max-width: min(88%, 420px);
   padding: 12px 13px;
   border: 0;
   border-radius: 18px 18px 18px 5px;
@@ -1801,7 +1888,8 @@ meter::-webkit-meter-optimum-value {
 }
 
 .bubble.coach {
-  width: 100%;
+  width: min(100%, 520px);
+  max-width: 100%;
   border: 2px solid var(--yellow);
   border-left: 8px solid var(--yellow);
   border-radius: 12px;
@@ -1829,6 +1917,9 @@ meter::-webkit-meter-optimum-value {
   display: grid;
   gap: 10px;
   padding: 14px;
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
   border: 1px solid rgba(9, 9, 9, 0.16);
   border-radius: 14px;
   background:
@@ -1908,6 +1999,10 @@ meter::-webkit-meter-optimum-value {
   .exercise-card {
     min-height: calc(var(--app-height) - var(--lesson-head) - 44px);
   }
+
+  .exercise-card.localText {
+    padding-bottom: max(14px, var(--safe-bottom));
+  }
 }
 
 @media (max-width: 380px) {
@@ -1926,8 +2021,8 @@ meter::-webkit-meter-optimum-value {
     font-size: 1.5rem;
   }
 
-  .chat-panel {
-    min-height: 210px;
+  .composer textarea {
+    min-height: 76px;
   }
 }
 

@@ -12,11 +12,11 @@ import {
   Volume2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import type { ReactNode } from "react";
 import { exerciseById, lessons, unitCount } from "./data/course";
 import { useProgress } from "./hooks/useProgress";
 import { useSpeech } from "./hooks/useSpeech";
-import type { Exercise, Lesson, OnboardingPath, Quality } from "./types";
+import type { Exercise, Lesson, LocalMemory, OnboardingPath, Quality } from "./types";
 
 type Tab = "learn" | "review" | "course" | "progress";
 
@@ -56,6 +56,8 @@ function App() {
         speak={speech.speak}
         speechSupported={speech.supported}
         onRecordLocal={(exercise, quality) => progress.recordReview(exercise.id, findLessonId(exercise.id), quality)}
+        localMemory={progress.progress.localMemory}
+        onLocalExchange={progress.recordLocalExchange}
         onBack={() => setActiveLesson(null)}
         onComplete={() => {
           progress.completeLesson(activeLesson.id);
@@ -74,6 +76,8 @@ function App() {
         speechSupported={speech.supported}
         onBack={() => setActiveLocalExercise(null)}
         onRecord={(exercise, quality) => progress.recordReview(exercise.id, findLessonId(exercise.id), quality)}
+        localMemory={progress.progress.localMemory}
+        onLocalExchange={progress.recordLocalExchange}
         onComplete={() => setActiveLocalExercise(null)}
       />
     );
@@ -115,6 +119,8 @@ function App() {
           speak={speech.speak}
           speechSupported={speech.supported}
           onRecord={(exercise, quality) => progress.recordReview(exercise.id, findLessonId(exercise.id), quality)}
+          localMemory={progress.progress.localMemory}
+          onLocalExchange={progress.recordLocalExchange}
         />
       )}
 
@@ -333,6 +339,8 @@ function LessonPlayer({
   onBack,
   onComplete,
   onRecordLocal,
+  localMemory,
+  onLocalExchange,
 }: {
   lesson: Lesson;
   speak: (text: string) => void;
@@ -340,6 +348,8 @@ function LessonPlayer({
   onBack: () => void;
   onComplete: () => void;
   onRecordLocal: (exercise: Exercise, quality: Quality) => void;
+  localMemory: LocalMemory;
+  onLocalExchange: (text: string, objective?: string) => void;
 }) {
   const [index, setIndex] = useState(0);
   const exercise = lesson.exercises[index];
@@ -374,6 +384,8 @@ function LessonPlayer({
           else setIndex((current) => current + 1);
         }}
         onRecordLocal={onRecordLocal}
+        localMemory={localMemory}
+        onLocalExchange={onLocalExchange}
       />
     </main>
   );
@@ -386,6 +398,8 @@ function LocalPracticePlayer({
   onBack,
   onComplete,
   onRecord,
+  localMemory,
+  onLocalExchange,
 }: {
   exercise: Exercise;
   speak: (text: string) => void;
@@ -393,6 +407,8 @@ function LocalPracticePlayer({
   onBack: () => void;
   onComplete: () => void;
   onRecord: (exercise: Exercise, quality: Quality) => void;
+  localMemory: LocalMemory;
+  onLocalExchange: (text: string, objective?: string) => void;
 }) {
   return (
     <main className="lesson-shell local-practice-shell">
@@ -412,6 +428,8 @@ function LocalPracticePlayer({
         actionLabel="Finish text"
         onAction={onComplete}
         onRecordLocal={onRecord}
+        localMemory={localMemory}
+        onLocalExchange={onLocalExchange}
       />
     </main>
   );
@@ -425,6 +443,8 @@ function ExerciseCard({
   onAction,
   onReviewQuality,
   onRecordLocal,
+  localMemory,
+  onLocalExchange,
 }: {
   exercise: Exercise;
   speak: (text: string) => void;
@@ -433,6 +453,8 @@ function ExerciseCard({
   onAction?: () => void;
   onReviewQuality?: (quality: Quality) => void;
   onRecordLocal?: (exercise: Exercise, quality: Quality) => void;
+  localMemory?: LocalMemory;
+  onLocalExchange?: (text: string, objective?: string) => void;
 }) {
   const [selected, setSelected] = useState("");
   const [typed, setTyped] = useState("");
@@ -479,9 +501,9 @@ function ExerciseCard({
   const showFeedbackListen = speechSupported && (!showPhrase || correct === false);
   const leadText =
     exercise.type === "localText"
-      ? "Text in German."
+      ? "Type in German."
       : exercise.reviewMode === "hearIt" && exercise.type !== "teach"
-        ? "Listen. Choose what it means."
+        ? "Listen. Choose the answer."
         : exercise.promptOnly && visibleDe
           ? visibleDe
           : exercise.type === "builder"
@@ -607,8 +629,10 @@ function ExerciseCard({
       {exercise.type === "localText" && (
         <LocalChatBox
           exercise={exercise}
+          localMemory={localMemory ?? defaultLocalMemory}
           onComplete={() => setAnswered(true)}
           onRecord={(quality) => onRecordLocal?.(exercise, quality)}
+          onLocalExchange={onLocalExchange}
         />
       )}
 
@@ -626,15 +650,25 @@ function ReviewScreen({
   speak,
   speechSupported,
   onRecord,
+  localMemory,
+  onLocalExchange,
 }: {
   dueIds: string[];
   speak: (text: string) => void;
   speechSupported: boolean;
   onRecord: (exercise: Exercise, quality: Quality) => void;
+  localMemory: LocalMemory;
+  onLocalExchange: (text: string, objective?: string) => void;
 }) {
   const [completed, setCompleted] = useState<string[]>([]);
+  const [pendingQuality, setPendingQuality] = useState<Quality | null>(null);
   const current = dueIds.find((id) => !completed.includes(id));
   const exercise = current ? exerciseById.get(current) : undefined;
+  const currentNumber = Math.min(completed.length + 1, dueIds.length);
+
+  useEffect(() => {
+    setPendingQuality(null);
+  }, [current]);
 
   if (!exercise) {
     return (
@@ -650,44 +684,41 @@ function ReviewScreen({
     <section className="screen">
       <div className="section-heading">
         <p>Review</p>
-        <h2>{dueIds.length - completed.length} due today</h2>
+        <h2>Card {currentNumber} of {dueIds.length}</h2>
+      </div>
+      <div className="review-session-note">
+        <strong>{modeLabel(exercise.reviewMode)}</strong>
+        <span>{pendingQuality ? "Read the feedback, then continue." : "Answer first. Review happens after the correction."}</span>
       </div>
       <ExerciseCard
+        key={exercise.id}
         exercise={exercise}
         speak={speak}
         speechSupported={speechSupported}
-        onReviewQuality={(quality) => {
-          onRecord(exercise, quality);
+        actionLabel={completed.length + 1 >= dueIds.length ? "Finish review" : "Next review"}
+        onAction={() => {
+          if (!pendingQuality) return;
+          onRecord(exercise, pendingQuality);
           setCompleted((items) => [...items, exercise.id]);
         }}
-        onRecordLocal={(item, quality) => {
-          onRecord(item, quality);
-          setCompleted((items) => [...items, item.id]);
+        onReviewQuality={setPendingQuality}
+        onRecordLocal={(_item, quality) => {
+          setPendingQuality(quality);
         }}
+        localMemory={localMemory}
+        onLocalExchange={onLocalExchange}
       />
-      <div className="manual-quality">
-        <button type="button" onClick={() => onRecordAndAdvance(exercise, "again", onRecord, setCompleted)}>
-          Again
-        </button>
-        <button type="button" onClick={() => onRecordAndAdvance(exercise, "hard", onRecord, setCompleted)}>
-          Hard
-        </button>
-        <button type="button" onClick={() => onRecordAndAdvance(exercise, "good", onRecord, setCompleted)}>
-          Good
-        </button>
-      </div>
     </section>
   );
 }
 
-function onRecordAndAdvance(
-  exercise: Exercise,
-  quality: Quality,
-  onRecord: (exercise: Exercise, quality: Quality) => void,
-  setCompleted: Dispatch<SetStateAction<string[]>>,
-) {
-  onRecord(exercise, quality);
-  setCompleted((items) => [...items, exercise.id]);
+function modeLabel(mode: Exercise["reviewMode"]) {
+  if (mode === "hearIt") return "Hear it";
+  if (mode === "typeIt") return "Type it";
+  if (mode === "buildIt") return "Build it";
+  if (mode === "chooseArticle") return "Choose the article";
+  if (mode === "respondInChat") return "Respond in chat";
+  return "Review";
 }
 
 type LocalMessage = {
@@ -702,6 +733,14 @@ type LocalResponse = {
   missionComplete: boolean;
 };
 
+const defaultLocalMemory: LocalMemory = {
+  name: "Lukas",
+  personality: "Patient, funny, football-loving Berliner who keeps German simple.",
+  relationship: "New local",
+  facts: ["Lukas likes football.", "Lukas lives in Berlin."],
+  exchanges: 0,
+};
+
 const looksLikeEnglish = (text: string) =>
   /\b(my name|where are|where do|i am|i'm|i come|thank you|thanks|please|what is|what are|how much|how old|do you|can you|the local)\b/i.test(text);
 
@@ -714,12 +753,16 @@ const coachText = (data: LocalResponse) => {
 
 function LocalChatBox({
   exercise,
+  localMemory,
   onComplete,
   onRecord,
+  onLocalExchange,
 }: {
   exercise: Exercise;
+  localMemory: LocalMemory;
   onComplete: () => void;
   onRecord: (quality: Quality) => void;
+  onLocalExchange?: (text: string, objective?: string) => void;
 }) {
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
@@ -733,8 +776,8 @@ function LocalChatBox({
     setStatus("");
     setInput("");
     setCanContinueOffline(false);
-    setMessages([{ role: "local", text: greetingFor(exercise) }]);
-  }, [exercise]);
+    setMessages([{ role: "local", text: greetingFor(exercise, localMemory) }]);
+  }, [exercise, localMemory.name]);
 
   const send = async () => {
     const learnerText = input.trim();
@@ -754,6 +797,7 @@ function LocalChatBox({
     setInput("");
     const nextMessages: LocalMessage[] = [...messages, { role: "learner", text: learnerText }];
     setMessages(nextMessages);
+    onLocalExchange?.(learnerText, exercise.objective);
 
     try {
       const staticPreview =
@@ -772,6 +816,7 @@ function LocalChatBox({
             scene: exercise.scene,
             skillId: exercise.skillId,
             acceptableAnswers: exercise.acceptableAnswers,
+            localMemory,
             tags: exercise.tags,
           },
           messages: nextMessages,
@@ -818,6 +863,15 @@ function LocalChatBox({
 
   return (
     <div className="local-mini">
+      <div className="local-contact">
+        <div className="local-avatar" aria-hidden="true">
+          {localMemory.name.slice(0, 1)}
+        </div>
+        <div>
+          <strong>{localMemory.name}</strong>
+          <span>{localMemory.relationship} · Berlin · football</span>
+        </div>
+      </div>
       <div className="local-mini-head">
         <div>
           <strong>Use what you learned.</strong>
@@ -828,7 +882,7 @@ function LocalChatBox({
       <div className="chat-panel">
         {messages.map((message, index) => (
           <div key={`${message.role}-${index}`} className={`bubble ${message.role}`}>
-            <span>{message.role === "learner" ? "You" : message.role === "local" ? "Local" : "Coach"}</span>
+            <span>{message.role === "learner" ? "You" : message.role === "local" ? localMemory.name : "Coach"}</span>
             <p>{message.text}</p>
           </div>
         ))}
@@ -840,6 +894,9 @@ function LocalChatBox({
           className="secondary-button"
           type="button"
           onClick={() => {
+            setCanContinueOffline(false);
+            setMissionComplete(true);
+            setStatus("Saved for review");
             onRecord("hard");
             onComplete();
           }}
@@ -849,7 +906,7 @@ function LocalChatBox({
       )}
 
       <div className="composer">
-        <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Schreib auf Deutsch..." rows={3} />
+        <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Type in German..." rows={3} />
         <div className="composer-actions">
           <button className="secondary-button" type="button" onClick={idk} disabled={loading}>
             IDK
@@ -863,10 +920,13 @@ function LocalChatBox({
   );
 }
 
-function greetingFor(exercise: Exercise) {
+function greetingFor(exercise: Exercise, memory: LocalMemory) {
+  const objective = `${exercise.objective ?? ""} ${exercise.de ?? ""} ${exercise.title}`.toLowerCase();
+  if (objective.includes("name") || objective.includes("heiß")) return `Hallo! Ich bin ${memory.name}. Wie heißt du?`;
   if (exercise.persona?.includes("ticket") || exercise.persona?.includes("cashier")) return "Guten Tag. Was möchten Sie?";
   if (exercise.persona?.includes("station")) return "Hallo. Wohin möchtest du?";
-  return "Hallo! Schreib mir auf Deutsch.";
+  if (exercise.persona?.includes("cafe") || exercise.tags.includes("food")) return "Hallo! Was möchtest du?";
+  return `Hallo! Ich bin ${memory.name}. Schreib mir auf Deutsch.`;
 }
 
 function CourseScreen({

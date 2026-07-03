@@ -1,11 +1,19 @@
 import { useMemo, useState } from "react";
 import { allExercises, canDoStatements, exerciseById, lessons, localObjectives } from "../data/course";
-import type { CanDoStatus, OnboardingPath, ProgressState, Quality, ReviewItem } from "../types";
+import type { CanDoStatus, LocalMemory, OnboardingPath, ProgressState, Quality, ReviewItem } from "../types";
 
 const STORAGE_KEY = "gm-progress-v2";
 const LEGACY_STORAGE_KEY = "gm-progress-v1";
 
 const dayKey = (date = new Date()) => date.toISOString().slice(0, 10);
+
+const defaultLocalMemory = (): LocalMemory => ({
+  name: "Lukas",
+  personality: "Patient, funny, football-loving Berliner who keeps German simple and asks natural follow-up questions.",
+  relationship: "New local",
+  facts: ["Lukas likes football.", "Lukas lives in Berlin."],
+  exchanges: 0,
+});
 
 const emptyProgress = (): ProgressState => ({
   completedLessons: [],
@@ -17,6 +25,7 @@ const emptyProgress = (): ProgressState => ({
   canDoState: {},
   conceptMastery: {},
   reviewHistory: {},
+  localMemory: defaultLocalMemory(),
   settings: {
     speechRate: 0.82,
     voiceURI: "",
@@ -51,6 +60,48 @@ const cleanReviewItems = (value: unknown): Record<string, ReviewItem> => {
   return items;
 };
 
+const conceptCategories = [
+  "articles",
+  "noun gender",
+  "present verbs",
+  "word order",
+  "questions",
+  "accusative",
+  "dative",
+  "modal verbs",
+  "Perfekt",
+  "separable verbs",
+  "weil/reasons",
+  "conversation survival",
+] as const;
+
+const conceptsForExercise = (exercise: (typeof allExercises)[number]) => {
+  const tags = exercise.tags.map((tag) => tag.toLowerCase());
+  const concepts = new Set<string>();
+  const addWhen = (concept: (typeof conceptCategories)[number], test: (tag: string) => boolean) => {
+    if (tags.some(test)) concepts.add(concept);
+  };
+
+  addWhen("articles", (tag) => tag.includes("article") || tag.includes("case"));
+  addWhen("noun gender", (tag) => tag.includes("noun gender") || tag.includes("articles and nouns"));
+  addWhen("present verbs", (tag) => tag.includes("present verbs"));
+  addWhen("word order", (tag) => tag.includes("word order"));
+  addWhen("questions", (tag) => tag.includes("question"));
+  addWhen("accusative", (tag) => tag.includes("accusative"));
+  addWhen("dative", (tag) => tag.includes("dative"));
+  addWhen("modal verbs", (tag) => tag.includes("modal"));
+  addWhen("Perfekt", (tag) => tag.includes("perfekt") || tag.includes("past tense"));
+  addWhen("separable verbs", (tag) => tag.includes("separable"));
+  addWhen("weil/reasons", (tag) => tag.includes("weil") || tag.includes("reason"));
+  addWhen("conversation survival", (tag) => tag.includes("conversation") || tag.includes("dialogue") || tag.includes("local text"));
+
+  if (exercise.reviewMode === "respondInChat" || exercise.type === "dialogue") concepts.add("conversation survival");
+  if (exercise.reviewMode === "buildIt") concepts.add("word order");
+  if (exercise.reviewMode === "chooseArticle") concepts.add("articles");
+  if (concepts.size === 0) concepts.add("conversation survival");
+  return concepts;
+};
+
 const buildCanDoState = (completedLessons: string[]): Record<string, CanDoStatus> => {
   const completed = new Set(completedLessons);
   const state: Record<string, CanDoStatus> = {};
@@ -67,18 +118,19 @@ const buildCanDoState = (completedLessons: string[]): Record<string, CanDoStatus
 const buildConceptMastery = (
   lastQuality: Record<string, Quality>,
 ): ProgressState["conceptMastery"] => {
-  const stats: ProgressState["conceptMastery"] = {};
+  const stats: ProgressState["conceptMastery"] = Object.fromEntries(
+    conceptCategories.map((concept) => [concept, { comfortable: 0, weak: 0, seen: 0, total: 0, score: 0 }]),
+  );
   for (const exercise of allExercises) {
-    const tags = exercise.tags.length > 0 ? exercise.tags : ["conversation survival"];
-    for (const tag of tags) {
-      const current = stats[tag] ?? { comfortable: 0, weak: 0, seen: 0, total: 0, score: 0 };
+    for (const concept of conceptsForExercise(exercise)) {
+      const current = stats[concept] ?? { comfortable: 0, weak: 0, seen: 0, total: 0, score: 0 };
       const quality = lastQuality[exercise.id];
       current.total += 1;
       if (quality) current.seen += 1;
       if (quality === "good") current.comfortable += 1;
       if (quality === "again" || quality === "hard") current.weak += 1;
       current.score = current.total === 0 ? 0 : Math.round((current.comfortable / current.total) * 100);
-      stats[tag] = current;
+      stats[concept] = current;
     }
   }
   return stats;
@@ -106,8 +158,9 @@ const mergeProgress = (raw: Partial<ProgressState>): ProgressState => {
     unlockedLessonIndex: Math.max(raw.unlockedLessonIndex ?? 0, completedLessons.length),
     dailyPlan: raw.dailyPlan && typeof raw.dailyPlan === "object" ? raw.dailyPlan : {},
     canDoState: { ...buildCanDoState(completedLessons), ...(raw.canDoState ?? {}) },
-    conceptMastery: { ...buildConceptMastery(lastQuality), ...(raw.conceptMastery ?? {}) },
+    conceptMastery: buildConceptMastery(lastQuality),
     reviewHistory: raw.reviewHistory && typeof raw.reviewHistory === "object" ? raw.reviewHistory : {},
+    localMemory: { ...base.localMemory, ...(raw.localMemory ?? {}) },
     settings: { ...base.settings, ...(raw.settings ?? {}) },
   };
 };
@@ -148,6 +201,12 @@ const nextInterval = (item: ReviewItem | undefined, quality: Quality) => {
   return Math.min(30, Math.round(current * 1.8));
 };
 
+const qualityRank = (quality: Quality) => {
+  if (quality === "again") return 0;
+  if (quality === "hard") return 1;
+  return 2;
+};
+
 const lessonIndexForPath = (path: OnboardingPath) => {
   if (path === "new") return 0;
   if (path === "basics") return 7;
@@ -183,7 +242,7 @@ export function useProgress() {
     const now = Date.now();
     return Object.values(progress.reviewItems)
       .filter((item) => item.dueAt <= now)
-      .sort((a, b) => a.dueAt - b.dueAt);
+      .sort((a, b) => qualityRank(a.quality) - qualityRank(b.quality) || a.dueAt - b.dueAt);
   }, [progress.reviewItems]);
 
   const weakCount = useMemo(
@@ -327,6 +386,27 @@ export function useProgress() {
     setProgress((current) => ({ ...current, settings: { ...current.settings, ...settings } }));
   };
 
+  const recordLocalExchange = (text: string, objective?: string) => {
+    const trimmed = text.replace(/\s+/g, " ").trim();
+    if (!trimmed) return;
+    setProgress((current) => {
+      const exchanges = current.localMemory.exchanges + 1;
+      const relationship = exchanges >= 18 ? "Regular contact" : exchanges >= 8 ? "Familiar local" : "New local";
+      const fact = trimmed.length > 90 ? `${trimmed.slice(0, 87)}...` : trimmed;
+      const facts = Array.from(new Set([...current.localMemory.facts, fact])).slice(-8);
+      return {
+        ...current,
+        localMemory: {
+          ...current.localMemory,
+          facts,
+          exchanges,
+          relationship,
+          lastObjective: objective,
+        },
+      };
+    });
+  };
+
   const resetProgress = () => {
     const next = emptyProgress();
     persist(next);
@@ -368,6 +448,7 @@ export function useProgress() {
     chooseOnboardingPath,
     completeLesson,
     recordReview,
+    recordLocalExchange,
     updateSettings,
     resetProgress,
   };

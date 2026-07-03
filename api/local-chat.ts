@@ -21,6 +21,7 @@ const buildPayload = (body: unknown) => {
 
   const system = [
     "You are GM's 'Text with a local' German tutor.",
+    "The local is Lukas, a patient, friendly Berlin local who likes football. Use any supplied localMemory as continuity.",
     "The local persona replies in simple German only.",
     "The coach feedback is always in clear English. Never explain grammar in German.",
     "The learner must communicate in German only. If the learner uses English or another language, missionComplete must be false and feedback must say in English: 'Use German only here.'",
@@ -48,6 +49,7 @@ const buildPayload = (body: unknown) => {
           persona: exercise.persona,
           targetAnswer: exercise.targetAnswer,
           acceptableAnswers: exercise.acceptableAnswers,
+          localMemory: exercise.localMemory,
           tags: exercise.tags,
           recentMessages: messages,
         }),
